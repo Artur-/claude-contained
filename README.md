@@ -11,12 +11,12 @@ There are some caveats:
 
 1. Build the container:
    ```bash
-   container build -t claude-contained .
+   container build --platform linux/arm64 -t claude-contained .
    ```
 
-2. Put `claude-contained` somewhere on your PATH (e.g., `/usr/local/bin`), optionally aliasing to `claude`.
+3. Put `claude-contained` somewhere on your PATH (e.g., `/usr/local/bin`), optionally aliasing to `claude`.
 
-3. Run:
+4. Run:
    ```bash
    claude-contained              # Current directory
    claude-contained ./my-project # Specific directory
