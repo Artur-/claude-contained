@@ -2,6 +2,11 @@
 
 Run Claude Code inside an Apple Containers sandbox with persistent state.
 
+There are some caveats:
+
+- Currently does not forward ports for local MCPs such as Figma Desktop
+- As the project/work folder always has the same name, and Claude Code saves a bunch of things such as history based on folder name, these settings will persist between projects. This is sometimes good, sometimes not.
+
 ## Quick Start
 
 1. Build the container:
