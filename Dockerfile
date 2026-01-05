@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client ca-certificates ripgrep \
     curl bash xz-utils unzip \
     python3 python3-pip python3-venv \
+    iproute2 gosu \
   && rm -rf /var/lib/apt/lists/*
 
 # ---- Install JetBrains Runtime ----------------------------------------------
@@ -47,15 +48,37 @@ RUN set -eux; \
 ENV JAVA_TOOL_OPTIONS="-XX:+AllowEnhancedClassRedefinition -XX:HotswapAgent=fatjar"
 
 # ---- Claude Code ------------------------------------------------------------
-RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @anthropic-ai/claude-code \
+  && npm cache clean --force
 
 # ---- Non-root user ----------------------------------------------------------
 RUN useradd -m -s /bin/bash dev \
   && mkdir -p /work \
   && chown -R dev:dev /work /home/dev
 
-USER dev
+# ---- Entrypoint (adds host.local for accessing host services) ---------------
+RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
+#!/bin/bash
+set -e
+
+# Add host.local pointing to the gateway (host machine)
+GATEWAY_IP=$(ip route | grep default | awk '{print $3}')
+if [ -n "$GATEWAY_IP" ]; then
+  grep -q "host.local" /etc/hosts 2>/dev/null || echo "$GATEWAY_IP host.local" >> /etc/hosts
+fi
+
+# If running as root (e.g., -u 0 for maintenance), stay as root
+# Otherwise drop to dev user
+if [ "$(id -u)" = "0" ] && [ "${STAY_ROOT:-}" != "1" ]; then
+  exec gosu dev "$@"
+else
+  exec "$@"
+fi
+EOF
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 WORKDIR /work
 ENV HOME=/home/dev
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["claude"]

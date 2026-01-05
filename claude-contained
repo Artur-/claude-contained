@@ -56,50 +56,66 @@ if [[ ${#paths[@]} -eq 0 ]]; then
   paths+=(".")
 fi
 
-realpath_py() {
-  python3 - "$1" <<'PY'
-import os,sys
-print(os.path.realpath(sys.argv[1]))
-PY
+resolve_path() {
+  if command -v python3 &>/dev/null; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+  elif command -v realpath &>/dev/null; then
+    realpath "$1"
+  elif command -v readlink &>/dev/null && readlink -f / &>/dev/null; then
+    readlink -f "$1"
+  else
+    # Fallback: works for directories
+    (cd "$1" 2>/dev/null && pwd) || echo "$1"
+  fi
 }
 
-main_host="$(realpath_py "${paths[0]}")"
+main_host="$(resolve_path "${paths[0]}")"
 main_guest="/work/main"
 
 # Ensure state volume exists
 container volume create claude_state >/dev/null 2>&1 || true
 
 # Ensure the volume is writable by user 'dev' inside the container.
-# We do this as root, once per machine/volume. It's safe to run every time.
-container run --rm -u 0 \
+# Only run once per volume by checking for a marker file.
+# STAY_ROOT=1 tells the entrypoint to not drop privileges.
+marker_check=$(container run --rm -e STAY_ROOT=1 \
   -v claude_state:/home/dev \
   claude-contained:latest \
-  sh -lc 'chown -R dev:dev /home/dev || true' \
-  >/dev/null 2>&1 || true
+  sh -c 'test -f /home/dev/.ownership_fixed && echo yes || echo no' 2>/dev/null) || marker_check="no"
 
-run_argv=(
+if [[ "$marker_check" != "yes" ]]; then
+  container run --rm -e STAY_ROOT=1 \
+    -v claude_state:/home/dev \
+    claude-contained:latest \
+    sh -c 'chown -R dev:dev /home/dev && touch /home/dev/.ownership_fixed' \
+    >/dev/null 2>&1 || true
+fi
+
+# Build container args separately from claude args
+container_argv=(
   container run --rm -it
-  --name claude-contained
+  --name "claude-contained-$$"
   --ssh
   -v claude_state:/home/dev
   -w "${main_guest}"
   --mount "type=bind,src=${main_host},dst=${main_guest}"
-  claude-contained:latest
-  claude
 )
 
-# Additional mounts + auto --add-dir
+claude_argv=(claude)
+
+# Additional mounts go to container_argv, --add-dir goes to claude_argv
 idx=1
 for p in "${paths[@]:1}"; do
-  hp="$(realpath_py "$p")"
+  hp="$(resolve_path "$p")"
   gp="/work/extra${idx}"
-  run_argv+=( --mount "type=bind,src=${hp},dst=${gp}" )
-  run_argv+=( --add-dir "${gp}" )
+  container_argv+=( --mount "type=bind,src=${hp},dst=${gp}" )
+  claude_argv+=( --add-dir "${gp}" )
   idx=$((idx+1))
 done
 
+# Append user's claude args
 if [[ ${#claude_args[@]} -gt 0 ]]; then
-  run_argv+=( "${claude_args[@]}" )
+  claude_argv+=( "${claude_args[@]}" )
 fi
 
-exec "${run_argv[@]}"
+exec "${container_argv[@]}" claude-contained:latest "${claude_argv[@]}"
