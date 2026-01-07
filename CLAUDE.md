@@ -37,7 +37,7 @@ claude-contained . -- --model sonnet
 
 ### Container Design
 
-- First mounted directory → `/work/main` (working directory)
+- First mounted directory → `/work/<project-name>` (working directory)
 - Additional directories → `/work/extra1`, `/work/extra2`, etc. (auto `--add-dir`)
 - Persistent state stored in `claude_state` named volume
 - SSH agent forwarding enabled
@@ -53,4 +53,3 @@ claude-contained . -- --model sonnet
 ## Known Caveats
 
 - Port forwarding not available for local MCPs (use `host.local` workaround)
-- Claude Code settings persist between projects due to fixed `/work/main` directory name

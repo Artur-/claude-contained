@@ -15,7 +15,7 @@ Options:
 
 Behavior:
   - If no directories are provided, defaults to the current directory.
-  - The first directory is mounted as /work/main and used as the working directory.
+  - The first directory is mounted as /work/<project-name> and used as the working directory.
   - Additional directories are mounted as /work/extraN and automatically
     added to Claude using --add-dir.
   - Claude state is persisted in the named volume: claude_state
@@ -82,7 +82,8 @@ resolve_path() {
 }
 
 main_host="$(resolve_path "${paths[0]}")"
-main_guest="/work/main"
+project_name="$(basename "$main_host")"
+main_guest="/work/${project_name}"
 
 # Ensure state volume exists
 container volume create claude_state >/dev/null 2>&1 || true

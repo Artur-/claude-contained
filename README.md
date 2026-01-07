@@ -5,7 +5,6 @@ Run Claude Code inside an [Apple Container](https://github.com/apple/container) 
 There are some caveats:
 
 - Currently does not forward ports for local MCPs such as Figma Desktop
-- As the project/work folder always has the same name, and Claude Code saves a bunch of things such as history based on folder name, these settings will persist between projects. This is sometimes good, sometimes not.
 
 ## Quick Start
 
@@ -37,7 +36,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 
 ### Behavior
 
-- First directory is mounted at `/work/main` (working directory)
+- First directory is mounted at `/work/<project-name>` (working directory)
 - Additional directories are mounted as `/work/extraN` and auto-added to Claude via `--add-dir`
 - State is persisted in `claude_state` volume (auto-created on first run)
 - SSH agent is forwarded automatically
