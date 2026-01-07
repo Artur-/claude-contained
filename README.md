@@ -20,8 +20,17 @@ Run Claude Code inside an Apple Containers sandbox with persistent state.
 ## Usage
 
 ```
-claude-contained [main_dir] [extra_dir ...] [-- <claude args...>]
+claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 ```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `-s`, `--shell` | Start a bash shell instead of Claude Code (for debugging) |
+| `-h`, `--help` | Show help message |
+
+### Behavior
 
 - First directory is mounted at `/work/main` (working directory)
 - Additional directories are mounted as `/work/extraN` and auto-added to Claude via `--add-dir`
@@ -35,6 +44,8 @@ claude-contained                                    # Current directory
 claude-contained . ../other/project                 # Multiple directories
 claude-contained . -- --model sonnet --verbose      # Pass args to Claude
 claude-contained --help                             # Show help
+claude-contained -s                                 # Debug shell in current directory
+claude-contained -s ./my-project                    # Debug shell with specific directory
 ```
 
 ## Accessing Host Services

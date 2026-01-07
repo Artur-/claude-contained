@@ -19,13 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl bash xz-utils unzip \
     python3 python3-pip python3-venv \
     iproute2 gosu \
-    # Chromium for Playwright (Chrome doesn't support Linux ARM64)
-    chromium \
-  && rm -rf /var/lib/apt/lists/* \
-  # Create Chrome wrapper at the path Playwright expects
-  && mkdir -p /opt/google/chrome \
-  && printf '#!/bin/sh\nexec /usr/bin/chromium "$@"\n' > /opt/google/chrome/chrome \
-  && chmod +x /opt/google/chrome/chrome
+  && rm -rf /var/lib/apt/lists/*
 
 # ---- Install JetBrains Runtime ----------------------------------------------
 RUN set -eux; \
@@ -90,10 +84,17 @@ RUN npm install -g \
     pyright \
   && npm cache clean --force
 
+# ---- Playwright Chromium (Chrome doesn't support Linux ARM64) --------------
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN npx playwright install chromium \
+  && npx playwright install-deps chromium \
+  && chmod -R 755 /opt/playwright-browsers \
+  && ln -s /opt/playwright-browsers/chromium-*/chrome-linux/chrome /opt/playwright-browsers/chromium
+
 # ---- Non-root user ----------------------------------------------------------
 RUN useradd -m -s /bin/bash dev \
   && mkdir -p /work \
-  && chown -R dev:dev /work /home/dev
+  && chown -R dev:dev /work /home/dev /opt/playwright-browsers
 
 # ---- Entrypoint (adds host.local for accessing host services) ---------------
 RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
@@ -110,14 +111,14 @@ if [ -n "$GATEWAY_IP" ]; then
   grep -q "host.local" /etc/hosts 2>/dev/null || echo "$GATEWAY_IP host.local" >> /etc/hosts
 fi
 
-# Patch Playwright plugin to use system Chromium (Chrome doesn't support ARM64)
+# Patch Playwright plugin to use bundled Chromium (Chrome doesn't support ARM64)
 PLAYWRIGHT_PLUGIN_MCP="/home/dev/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/playwright/.mcp.json"
 if [ -d "$(dirname "$PLAYWRIGHT_PLUGIN_MCP")" ]; then
   cat > "$PLAYWRIGHT_PLUGIN_MCP" << 'PWEOF'
 {
   "playwright": {
     "command": "npx",
-    "args": ["@playwright/mcp@latest", "--executable-path", "/usr/bin/chromium", "--headless", "--no-sandbox"]
+    "args": ["@playwright/mcp@latest", "--headless", "--no-sandbox", "--executable-path", "/opt/playwright-browsers/chromium"]
   }
 }
 PWEOF

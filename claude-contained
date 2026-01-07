@@ -4,10 +4,14 @@ set -euo pipefail
 show_help() {
   cat <<'EOF'
 Usage:
-  claude-contained [main_dir] [extra_dir ...] [-- <claude args...>]
+  claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 
 Description:
   Runs Claude Code inside an Apple Containers sandbox.
+
+Options:
+  -s, --shell    Start a bash shell instead of Claude Code (for debugging)
+  -h, --help     Show this help message
 
 Behavior:
   - If no directories are provided, defaults to the current directory.
@@ -23,12 +27,20 @@ Examples:
   claude-contained . ../other/project ../shared/lib
   claude-contained . ../other/project -- --model sonnet --verbose
   claude-contained -- --help
+  claude-contained -s                  # Debug shell in current directory
+  claude-contained -s ./my-project     # Debug shell with specific directory
 EOF
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   show_help
   exit 0
+fi
+
+shell_mode=0
+if [[ "${1:-}" == "-s" || "${1:-}" == "--shell" ]]; then
+  shell_mode=1
+  shift
 fi
 
 if [[ $# -eq 0 ]]; then
@@ -92,8 +104,10 @@ if [[ "$marker_check" != "yes" ]]; then
 fi
 
 # Build container args separately from claude args
+CLAUDE_MEMORY="${CLAUDE_MEMORY:-8g}"
 container_argv=(
   container run --rm -it
+  --memory "${CLAUDE_MEMORY}"
   --name "claude-contained-$$"
   --ssh
   -v claude_state:/home/dev
@@ -118,4 +132,8 @@ if [[ ${#claude_args[@]} -gt 0 ]]; then
   claude_argv+=( "${claude_args[@]}" )
 fi
 
-exec "${container_argv[@]}" claude-contained:latest "${claude_argv[@]}"
+if [[ $shell_mode -eq 1 ]]; then
+  exec "${container_argv[@]}" claude-contained:latest bash
+else
+  exec "${container_argv[@]}" claude-contained:latest "${claude_argv[@]}"
+fi
