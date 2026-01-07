@@ -104,10 +104,33 @@ container_argv=(
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
 
-# Pass ~/.claude.json contents via env var (can't bind-mount individual files)
-if [[ -f "${HOST_HOME}/.claude.json" ]]; then
-  container_argv+=( -e "HOST_CLAUDE_JSON=$(cat "${HOST_HOME}/.claude.json")" )
+# Share ~/.claude.json via symlink to shared directory (can't bind-mount individual files)
+# See: https://github.com/apple/containerization/issues/79
+# Canonical location is ~/.claude-contained/.claude.json; ~/.claude.json is a symlink to it.
+# All containers access the same file via virtiofs, so Claude Code's own locking works.
+HOST_CLAUDE_CONTAINED="${HOST_HOME}/.claude-contained"
+HOST_CLAUDE_JSON="${HOST_HOME}/.claude.json"
+SHARED_CLAUDE_JSON="${HOST_CLAUDE_CONTAINED}/.claude.json"
+mkdir -p "${HOST_CLAUDE_CONTAINED}"
+
+# Migrate/repair: ensure ~/.claude.json is symlink to shared location
+if [[ -f "$HOST_CLAUDE_JSON" && ! -L "$HOST_CLAUDE_JSON" ]]; then
+  # Host file is regular file (not symlink) - migrate it to shared location
+  # This handles: first run, or host Claude Code replaced symlink via atomic write
+  mv "$HOST_CLAUDE_JSON" "$SHARED_CLAUDE_JSON"
+  ln -s "$SHARED_CLAUDE_JSON" "$HOST_CLAUDE_JSON"
+elif [[ -L "$HOST_CLAUDE_JSON" && ! -e "$SHARED_CLAUDE_JSON" ]]; then
+  # Symlink exists but target doesn't - broken symlink, remove it
+  rm "$HOST_CLAUDE_JSON"
 fi
+
+# Ensure symlink exists (if shared file exists but no symlink yet)
+if [[ ! -e "$HOST_CLAUDE_JSON" && -f "$SHARED_CLAUDE_JSON" ]]; then
+  ln -s "$SHARED_CLAUDE_JSON" "$HOST_CLAUDE_JSON"
+fi
+
+# Mount the shared directory for bidirectional ~/.claude.json access
+container_argv+=( --mount "type=bind,src=${HOST_CLAUDE_CONTAINED},dst=${HOST_CLAUDE_CONTAINED}" )
 
 claude_argv=(claude)
 
@@ -123,6 +146,7 @@ if [[ ${#claude_args[@]} -gt 0 ]]; then
   claude_argv+=( "${claude_args[@]}" )
 fi
 
+# Run container
 if [[ $shell_mode -eq 1 ]]; then
   exec "${container_argv[@]}" claude-contained:latest bash
 else

@@ -5,6 +5,8 @@ Run Claude Code inside an [Apple Container](https://github.com/apple/container) 
 There are some caveats:
 
 - Currently does not forward ports for local MCPs such as Figma Desktop
+- **`~/.claude.json` is relocated**: On first run, your `~/.claude.json` is moved to `~/.claude-contained/.claude.json` and replaced with a symlink. This allows containers to share the file. **If you delete `~/.claude-contained/`, you will lose your Claude credentials and settings.**
+- **Don't mix contained and uncontained**: Running `claude-contained` and regular `claude` simultaneously may cause issues, as both access the same config file but through different paths. Run one or the other, not both at once.
 
 ## Quick Start
 

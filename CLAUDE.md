@@ -55,3 +55,5 @@ claude-contained . -- --model sonnet
 
 - Port forwarding not available for local MCPs (use `host.local` workaround)
 - Multiple simultaneous sessions share `~/.claude` state; concurrent writes may conflict (Claude Code limitation)
+- `~/.claude.json` is relocated to `~/.claude-contained/.claude.json` (with symlink at original location) to work around Apple Containers' inability to bind-mount individual files. Deleting `~/.claude-contained/` will lose credentials.
+- Running `claude-contained` and regular `claude` simultaneously is not recommended (both access same config via different paths)

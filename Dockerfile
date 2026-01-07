@@ -148,11 +148,12 @@ if [ -n "${HOST_HOME:-}" ]; then
 
   export HOME="${HOST_HOME}"
 
-  # Write ~/.claude.json from env var (can't bind-mount individual files)
-  if [ -n "${HOST_CLAUDE_JSON:-}" ]; then
-    echo "$HOST_CLAUDE_JSON" > "${HOST_HOME}/.claude.json"
-    chown dev:dev "${HOST_HOME}/.claude.json" 2>/dev/null || true
-    unset HOST_CLAUDE_JSON  # Don't leak credentials to subprocesses
+  # Create container-side symlink to ~/.claude.json in shared directory
+  # (Apple Containers can't bind-mount individual files, so we use symlinks)
+  SHARED_CLAUDE_JSON="${HOST_HOME}/.claude-contained/.claude.json"
+  if [ -e "${SHARED_CLAUDE_JSON}" ] && [ ! -e "${HOST_HOME}/.claude.json" ]; then
+    ln -s "${SHARED_CLAUDE_JSON}" "${HOST_HOME}/.claude.json"
+    chown -h dev:dev "${HOST_HOME}/.claude.json" 2>/dev/null || true
   fi
 fi
 
