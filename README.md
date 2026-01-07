@@ -1,6 +1,6 @@
 # Claude Code Contained
 
-Run Claude Code inside an Apple Containers sandbox with persistent state.
+Run Claude Code inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state.
 
 There are some caveats:
 
