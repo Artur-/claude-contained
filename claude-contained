@@ -101,9 +101,13 @@ container_argv=(
   -e "HOST_GID=$(id -g)"
   -w "${main_host}"
   --mount "type=bind,src=${HOST_CLAUDE_DIR},dst=${HOST_HOME}/.claude"
-  --mount "type=bind,src=${HOST_HOME}/.claude.json,dst=${HOST_HOME}/.claude.json"
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
+
+# Pass ~/.claude.json contents via env var (can't bind-mount individual files)
+if [[ -f "${HOST_HOME}/.claude.json" ]]; then
+  container_argv+=( -e "HOST_CLAUDE_JSON=$(cat "${HOST_HOME}/.claude.json")" )
+fi
 
 claude_argv=(claude)
 

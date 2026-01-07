@@ -147,6 +147,13 @@ if [ -n "${HOST_HOME:-}" ]; then
   chown -R dev:dev /ms-playwright 2>/dev/null || true
 
   export HOME="${HOST_HOME}"
+
+  # Write ~/.claude.json from env var (can't bind-mount individual files)
+  if [ -n "${HOST_CLAUDE_JSON:-}" ]; then
+    echo "$HOST_CLAUDE_JSON" > "${HOST_HOME}/.claude.json"
+    chown dev:dev "${HOST_HOME}/.claude.json" 2>/dev/null || true
+    unset HOST_CLAUDE_JSON  # Don't leak credentials to subprocesses
+  fi
 fi
 
 # Drop to dev user (or stay root if STAY_ROOT=1)
