@@ -1,5 +1,5 @@
 # Claude Code + JetBrains Runtime (JBR) + HotswapAgent (always on) + Python
-FROM node:20-bookworm
+FROM node:20-bookworm-slim
 
 # ---- JBR pins ---------------------------------------------------------------
 ARG JBR_VERSION=21.0.9
@@ -19,6 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl bash xz-utils unzip \
     python3 python3-pip python3-venv \
     iproute2 gosu \
+    # Playwright/Chromium dependencies (replaces npx playwright install-deps)
+    libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
+    libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \
+    libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxkbcommon0 libxrandr2 xvfb \
   && rm -rf /var/lib/apt/lists/*
 
 # ---- Install JetBrains Runtime ----------------------------------------------
@@ -84,54 +89,45 @@ RUN npm install -g \
     pyright \
   && npm cache clean --force
 
-# ---- Playwright Chromium (Chrome doesn't support Linux ARM64) --------------
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN npx playwright install chromium \
-  && npx playwright install-deps chromium \
-  && chmod -R 755 /opt/playwright-browsers \
-  && ln -s /opt/playwright-browsers/chromium-*/chrome-linux/chrome /opt/playwright-browsers/chromium
+# ---- Playwright browser (build-time install for reliability) ----------------
+# Install Chromium to a fixed location instead of user cache for container use
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install chromium
+
+# ---- Chrome wrapper for Playwright MCP compatibility ------------------------
+# When projects use @playwright/mcp without --browser flag, it looks for Chrome.
+# This wrapper redirects to our installed Playwright Chromium.
+RUN mkdir -p /opt/google/chrome && cat <<'EOF' > /opt/google/chrome/chrome
+#!/bin/bash
+exec /ms-playwright/chromium-*/chrome-linux/chrome "$@"
+EOF
+RUN chmod +x /opt/google/chrome/chrome
 
 # ---- Non-root user ----------------------------------------------------------
 RUN useradd -m -s /bin/bash dev \
   && mkdir -p /work \
-  && chown -R dev:dev /work /home/dev /opt/playwright-browsers
+  && chown -R dev:dev /work /home/dev /ms-playwright
 
-# ---- Entrypoint (adds host.local for accessing host services) ---------------
+# ---- Entrypoint (host.local setup) ------------------------------------------
 RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
 #!/bin/bash
 set -e
 
-# Ensure JAVA_HOME points to JBR with HotswapAgent
 export JAVA_HOME=/opt/jbr
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# Add host.local pointing to the gateway (host machine)
+# Add host.local pointing to gateway (host machine)
 GATEWAY_IP=$(ip route | grep default | awk '{print $3}')
 if [ -n "$GATEWAY_IP" ]; then
   grep -q "host.local" /etc/hosts 2>/dev/null || echo "$GATEWAY_IP host.local" >> /etc/hosts
 fi
 
-# Patch Playwright plugin to use bundled Chromium (Chrome doesn't support ARM64)
-PLAYWRIGHT_PLUGIN_MCP="/home/dev/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/playwright/.mcp.json"
-if [ -d "$(dirname "$PLAYWRIGHT_PLUGIN_MCP")" ]; then
-  cat > "$PLAYWRIGHT_PLUGIN_MCP" << 'PWEOF'
-{
-  "playwright": {
-    "command": "npx",
-    "args": ["@playwright/mcp@latest", "--headless", "--no-sandbox", "--executable-path", "/opt/playwright-browsers/chromium"]
-  }
-}
-PWEOF
-fi
-
-# Ensure .cache directory exists with correct permissions (for Claude Code MCP logs)
-mkdir -p /home/dev/.cache
-chown -R dev:dev /home/dev/.cache
-
-# If running as root (e.g., -u 0 for maintenance), stay as root
-# Otherwise drop to dev user
+# Drop to dev user (or stay root if STAY_ROOT=1)
 if [ "$(id -u)" = "0" ] && [ "${STAY_ROOT:-}" != "1" ]; then
-  exec gosu dev "$@"
+  exec gosu dev env \
+    JAVA_HOME="$JAVA_HOME" \
+    PATH="$PATH" \
+    "$@"
 else
   exec "$@"
 fi
