@@ -108,7 +108,7 @@ RUN useradd -m -s /bin/bash dev \
   && mkdir -p /work \
   && chown -R dev:dev /work /home/dev /ms-playwright
 
-# ---- Entrypoint (host.local setup) ------------------------------------------
+# ---- Entrypoint (host.local setup + path parity) ---------------------------
 RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
 #!/bin/bash
 set -e
@@ -122,11 +122,39 @@ if [ -n "$GATEWAY_IP" ]; then
   grep -q "host.local" /etc/hosts 2>/dev/null || echo "$GATEWAY_IP host.local" >> /etc/hosts
 fi
 
+# Path parity setup: match host HOME and UID/GID
+if [ -n "${HOST_HOME:-}" ]; then
+  mkdir -p "${HOST_HOME}"
+
+  # Match host UID/GID (handle conflicts)
+  if [ -n "${HOST_UID:-}" ] && [ -n "${HOST_GID:-}" ]; then
+    EXISTING_GROUP=$(getent group "${HOST_GID}" | cut -d: -f1)
+    if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "dev" ]; then
+      groupmod -g $((HOST_GID + 10000)) "$EXISTING_GROUP" 2>/dev/null || true
+    fi
+
+    EXISTING_USER=$(getent passwd "${HOST_UID}" | cut -d: -f1)
+    if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "dev" ]; then
+      usermod -u $((HOST_UID + 10000)) "$EXISTING_USER" 2>/dev/null || true
+    fi
+
+    groupmod -g "${HOST_GID}" dev 2>/dev/null || true
+    usermod -u "${HOST_UID}" -g "${HOST_GID}" -d "${HOST_HOME}" dev 2>/dev/null || true
+  fi
+
+  chown dev:dev "${HOST_HOME}" 2>/dev/null || true
+  chown -R dev:dev "${HOST_HOME}/.claude" 2>/dev/null || true
+  chown -R dev:dev /ms-playwright 2>/dev/null || true
+
+  export HOME="${HOST_HOME}"
+fi
+
 # Drop to dev user (or stay root if STAY_ROOT=1)
 if [ "$(id -u)" = "0" ] && [ "${STAY_ROOT:-}" != "1" ]; then
   exec gosu dev env \
     JAVA_HOME="$JAVA_HOME" \
     PATH="$PATH" \
+    HOME="${HOME:-/home/dev}" \
     "$@"
 else
   exec "$@"
@@ -135,7 +163,7 @@ EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /work
-ENV HOME=/home/dev
+# HOME is set dynamically in entrypoint based on HOST_HOME
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["claude"]

@@ -29,27 +29,29 @@ claude-contained . -- --model sonnet
 
 ### Key Files
 
-- **claude-contained** - Main bash entry point (121 lines). Handles argument parsing, path resolution (with Python3/realpath/readlink fallbacks), volume management, and container execution.
+- **claude-contained** - Main bash entry point. Handles argument parsing, path resolution (with Python3/realpath/readlink fallbacks), and container execution with full path parity.
 
-- **Dockerfile** - Builds on Node 20 (Debian Bookworm). Installs JetBrains Runtime 21, HotswapAgent, Claude Code npm package, ripgrep, Python 3. Creates entrypoint.sh that configures `host.local` for host service access and uses gosu for privilege dropping.
+- **Dockerfile** - Builds on Node 20 (Debian Bookworm). Installs JetBrains Runtime 21, HotswapAgent, Claude Code npm package, ripgrep, Python 3. Creates entrypoint.sh that configures `host.local` for host service access, matches host UID/GID, and sets up path parity.
 
 - **.mcp.json** - MCP server configuration, notably enabling Figma Desktop MCP via `host.local:3845`.
 
 ### Container Design
 
-- First mounted directory → `/work/<project-name>` (working directory)
-- Additional directories → `/work/extra1`, `/work/extra2`, etc. (auto `--add-dir`)
-- Persistent state stored in `claude_state` named volume
+- **Full path parity**: Directories mounted at their original host paths (e.g., `/Users/me/project` → `/Users/me/project`)
+- **HOME parity**: Container HOME matches host HOME for consistent behavior
+- **UID/GID matching**: Container user matches host user IDs for proper file permissions
+- **State sharing**: `~/.claude` bind-mounted from host (enables multiple simultaneous sessions)
 - SSH agent forwarding enabled
 - Host services accessible via `host.local` hostname (resolved from container gateway IP)
 
 ### Notable Patterns
 
 - Path resolution prioritizes Python3 for reliability, with multiple fallbacks
-- Volume ownership checked via marker file to avoid redundant chown operations
+- Entrypoint dynamically adjusts UID/GID to match host user (handles conflicts)
 - Strict bash error handling with `set -euo pipefail`
 - `--` separator distinguishes directory arguments from Claude Code arguments
 
 ## Known Caveats
 
 - Port forwarding not available for local MCPs (use `host.local` workaround)
+- Multiple simultaneous sessions share `~/.claude` state; concurrent writes may conflict (Claude Code limitation)
