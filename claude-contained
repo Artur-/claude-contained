@@ -42,6 +42,12 @@ if [[ "${1:-}" == "-s" || "${1:-}" == "--shell" ]]; then
   shift
 fi
 
+# Ensure container system is running
+if ! container system status &>/dev/null; then
+  echo "Starting container system..."
+  container system start
+fi
+
 if [[ $# -eq 0 ]]; then
   set -- "."
 fi
