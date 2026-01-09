@@ -10,6 +10,7 @@ Description:
   Runs Claude Code inside an Apple Containers sandbox.
 
 Options:
+  -H PORT[:HOSTPORT] Forward host port to container localhost (can be repeated)
   -p HOST:CONTAINER  Publish container port to host (can be repeated)
   -s, --shell        Start a bash shell instead of Claude Code (for debugging)
   -h, --help         Show this help message
@@ -31,6 +32,8 @@ Examples:
   claude-contained -s ./my-project     # Debug shell with specific directory
   claude-contained -p 8080:8080 .      # Expose port 8080
   claude-contained -p 8080:8080 -p 3000:3000 -s  # Multiple ports with shell
+  claude-contained -H 3845 .           # Forward host:3845 to container localhost:3845
+  claude-contained -H 3845 -H 8080 .   # Forward multiple host ports
 EOF
 }
 
@@ -42,6 +45,7 @@ fi
 # Parse flags (can appear in any order)
 shell_mode=0
 port_maps=()
+host_forwards=()
 while [[ "${1:-}" == -* ]]; do
   case "${1:-}" in
     -s|--shell)
@@ -51,6 +55,11 @@ while [[ "${1:-}" == -* ]]; do
     -p)
       shift
       port_maps+=("$1")
+      shift
+      ;;
+    -H)
+      shift
+      host_forwards+=("$1")
       shift
       ;;
     *)
@@ -130,9 +139,15 @@ container_argv=(
 )
 
 # Add port mappings
-for pm in "${port_maps[@]}"; do
+for pm in "${port_maps[@]+"${port_maps[@]}"}"; do
   container_argv+=( -p "$pm" )
 done
+
+# Add host port forwards (container localhost → host)
+if [[ ${#host_forwards[@]} -gt 0 ]]; then
+  IFS=','; forwards_str="${host_forwards[*]}"; unset IFS
+  container_argv+=( -e "HOST_FORWARD_PORTS=${forwards_str}" )
+fi
 
 # Share ~/.claude.json via symlink to shared directory (can't bind-mount individual files)
 # See: https://github.com/apple/containerization/issues/79

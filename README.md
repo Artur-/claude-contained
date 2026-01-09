@@ -4,7 +4,7 @@ Run Claude Code inside an [Apple Container](https://github.com/apple/container) 
 
 There are some caveats:
 
-- Currently does not forward ports for local MCPs such as Figma Desktop
+- **Host localhost access**: `-H PORT` works with `claude-docked` (Docker) but not `claude-contained` (Apple Containers) for services bound to localhost. See [Accessing Host Services](#accessing-host-services).
 - **`~/.claude.json` is relocated**: On first run, your `~/.claude.json` is moved to `~/.claude-contained/.claude.json` and replaced with a symlink. This allows containers to share the file. **If you delete `~/.claude-contained/`, you will lose your Claude credentials and settings.**
 - **Don't mix contained and uncontained**: Running `claude-contained` and regular `claude` simultaneously may cause issues, as both access the same config file but through different paths. Run one or the other, not both at once.
 
@@ -50,6 +50,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 
 | Flag | Description |
 |------|-------------|
+| `-H PORT[:HOSTPORT]` | Forward host port to container localhost (can be repeated) |
 | `-p HOST:CONTAINER` | Publish container port to host (can be repeated) |
 | `-s`, `--shell` | Start a bash shell instead of Claude Code (for debugging) |
 | `-h`, `--help` | Show help message |
@@ -72,35 +73,43 @@ claude-contained -s                                 # Debug shell in current dir
 claude-contained -s ./my-project                    # Debug shell with specific directory
 claude-contained -p 8080:8080 .                     # Expose port 8080
 claude-contained -p 8080:8080 -p 3000:3000 -s       # Multiple ports with shell
+claude-contained -H 3845 .                          # Forward host:3845 to container
+claude-contained -H 3845 -H 8080 .                  # Forward multiple host ports
 ```
 
 ## Accessing Host Services
 
-The container runs in an isolated network, so `localhost` refers to the container itself, not your Mac. To connect to services running on your Mac (like Figma Desktop), use `host.local`.
+The container runs in an isolated network, so `localhost` refers to the container itself, not your Mac. To connect to services running on your Mac, use `host.local` or the `-H` flag.
 
-The container automatically configures `host.local` in `/etc/hosts` to resolve to the gateway IP (your Mac).
+### Docker (`claude-docked`) - Recommended for Host Services
+
+Use `-H PORT` to forward host ports to container localhost. This works because Docker Desktop has special routing to reach services bound to `127.0.0.1` on the host.
 
 ```bash
-# Inside the container, instead of localhost:3000, use:
-curl http://host.local:3000
+claude-docked -H 3845 .           # Forward host:3845 to container localhost:3845
+claude-docked -H 3845 -H 8080 .   # Multiple ports
 ```
+
+### Apple Containers (`claude-contained`) - Limited Host Access
+
+Apple Containers can only reach host services bound to `0.0.0.0` (all interfaces), not `127.0.0.1` (localhost only). Most services (including Figma Desktop) bind to localhost only for security.
+
+**What works:**
+- Services you control that bind to `0.0.0.0`
+- Using `host.local` hostname for services on all interfaces
+
+**What doesn't work:**
+- `-H` flag for localhost-bound services (like Figma Desktop MCP)
+
+For localhost-bound services, use `claude-docked` instead.
 
 ### Configuring Figma Desktop MCP
 
-The Figma plugin's `figma-desktop` MCP server defaults to `http://127.0.0.1:3845/mcp`, which won't work inside the container. To fix this, create a `.mcp.json` file in your project directory:
+Figma Desktop MCP binds to `localhost:3845`. Use Docker:
 
-```json
-{
-  "mcpServers": {
-    "figma-desktop": {
-      "type": "http",
-      "url": "http://host.local:3845/mcp"
-    }
-  }
-}
+```bash
+claude-docked -H 3845 .
 ```
-
-This overrides the default URL so the container can reach Figma Desktop running on your Mac.
 
 **Requirements:**
 - Figma Desktop must be running on your Mac
@@ -109,5 +118,18 @@ This overrides the default URL so the container can reach Figma Desktop running 
 
 ### Other MCPs
 
-For any MCP that needs to connect to a service on your Mac, replace `localhost` or `127.0.0.1` with `host.local` in the MCP configuration.
+For MCPs that expect `localhost`, use `claude-docked -H PORT`.
+
+For services bound to all interfaces (`0.0.0.0`), you can use `host.local` in a `.mcp.json` override:
+
+```json
+{
+  "mcpServers": {
+    "my-mcp": {
+      "type": "http",
+      "url": "http://host.local:PORT/mcp"
+    }
+  }
+}
+```
 

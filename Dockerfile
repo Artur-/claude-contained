@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client ca-certificates ripgrep \
     curl bash xz-utils unzip \
     python3 python3-pip python3-venv \
-    iproute2 gosu \
+    iproute2 gosu socat \
     # Playwright/Chromium dependencies (replaces npx playwright install-deps)
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
     libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \
@@ -116,10 +116,31 @@ set -e
 export JAVA_HOME=/opt/jbr
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# Add host.local pointing to gateway (host machine)
-GATEWAY_IP=$(ip route | grep default | awk '{print $3}')
-if [ -n "$GATEWAY_IP" ]; then
-  grep -q "host.local" /etc/hosts 2>/dev/null || echo "$GATEWAY_IP host.local" >> /etc/hosts
+# Add host.local pointing to host machine
+# Docker Desktop (macOS/Windows): use host.docker.internal
+# Apple Containers / Docker on Linux: use gateway IP
+if getent ahostsv4 host.docker.internal >/dev/null 2>&1; then
+  HOST_IP=$(getent ahostsv4 host.docker.internal | head -1 | awk '{print $1}')
+else
+  HOST_IP=$(ip route | grep default | awk '{print $3}')
+fi
+if [ -n "$HOST_IP" ]; then
+  grep -q "host.local" /etc/hosts 2>/dev/null || echo "$HOST_IP host.local" >> /etc/hosts
+fi
+
+# Forward host ports to container localhost (for MCPs that expect localhost)
+if [ -n "${HOST_FORWARD_PORTS:-}" ]; then
+  IFS=',' read -ra PORTS <<< "$HOST_FORWARD_PORTS"
+  for mapping in "${PORTS[@]}"; do
+    if [[ "$mapping" == *:* ]]; then
+      local_port="${mapping%%:*}"
+      host_port="${mapping##*:}"
+    else
+      local_port="$mapping"
+      host_port="$mapping"
+    fi
+    socat TCP-LISTEN:${local_port},fork,reuseaddr TCP:host.local:${host_port} &
+  done
 fi
 
 # Path parity setup: match host HOME and UID/GID
