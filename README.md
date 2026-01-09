@@ -92,7 +92,7 @@ claude-docked -H 3845 -H 8080 .   # Multiple ports
 
 ### Apple Containers (`claude-contained`) - Limited Host Access
 
-Apple Containers can only reach host services bound to `0.0.0.0` (all interfaces), not `127.0.0.1` (localhost only). Most services (including Figma Desktop) bind to localhost only for security.
+Apple Containers can only reach host services bound to `0.0.0.0` (all interfaces), not `127.0.0.1` (localhost only). Most services (including Figma Desktop) bind to localhost only for security. See [apple/container#346](https://github.com/apple/container/issues/346) for the feature request to add `host.docker.internal` equivalent.
 
 **What works:**
 - Services you control that bind to `0.0.0.0`
