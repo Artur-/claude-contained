@@ -1,6 +1,6 @@
 # Claude Code Contained
 
-Run Claude Code inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state.
+Run Claude Code inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state. Also works with Docker via `claude-docked`.
 
 There are some caveats:
 
@@ -10,17 +10,34 @@ There are some caveats:
 
 ## Quick Start
 
+### Apple Containers (macOS)
+
 1. Build the container:
    ```bash
    container build --platform linux/arm64 -t claude-contained .
    ```
 
-3. Put `claude-contained` somewhere on your PATH (e.g., `/usr/local/bin`), optionally aliasing to `claude`.
+2. Put `claude-contained` somewhere on your PATH (e.g., `/usr/local/bin`), optionally aliasing to `claude`.
 
-4. Run:
+3. Run:
    ```bash
    claude-contained              # Current directory
    claude-contained ./my-project # Specific directory
+   ```
+
+### Docker
+
+1. Build the container:
+   ```bash
+   docker build --platform linux/arm64 -t claude-contained .
+   ```
+
+2. Put `claude-docked` somewhere on your PATH.
+
+3. Run:
+   ```bash
+   claude-docked              # Current directory
+   claude-docked ./my-project # Specific directory
    ```
 
 ## Usage

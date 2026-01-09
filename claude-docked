@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+show_help() {
+  cat <<'EOF'
+Usage:
+  claude-docked [options] [main_dir] [extra_dir ...] [-- <claude args...>]
+
+Description:
+  Runs Claude Code inside a Docker container.
+
+Options:
+  -s, --shell    Start a bash shell instead of Claude Code (for debugging)
+  -h, --help     Show this help message
+
+Behavior:
+  - If no directories are provided, defaults to the current directory.
+  - Directories are mounted at their original host paths for full path parity.
+  - Additional directories are automatically added to Claude using --add-dir.
+  - Claude state (~/.claude) and Maven cache (~/.m2) are bind-mounted for persistence.
+  - SSH agent is forwarded when SSH_AUTH_SOCK is set.
+
+Examples:
+  claude-docked
+  claude-docked .
+  claude-docked . ../other/project ../shared/lib
+  claude-docked . ../other/project -- --model sonnet --verbose
+  claude-docked -- --help
+  claude-docked -s                  # Debug shell in current directory
+  claude-docked -s ./my-project     # Debug shell with specific directory
+
+Build the image:
+  docker build -t claude-contained .
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  show_help
+  exit 0
+fi
+
+shell_mode=0
+if [[ "${1:-}" == "-s" || "${1:-}" == "--shell" ]]; then
+  shell_mode=1
+  shift
+fi
+
+if [[ $# -eq 0 ]]; then
+  set -- "."
+fi
+
+# Split directories (before --) vs Claude args (after --)
+paths=()
+claude_args=()
+seen_sep=0
+for a in "$@"; do
+  if [[ "$a" == "--" ]]; then
+    seen_sep=1
+    continue
+  fi
+  if [[ $seen_sep -eq 0 ]]; then
+    paths+=("$a")
+  else
+    claude_args+=("$a")
+  fi
+done
+
+# If user did: claude-docked -- <claude args...>
+if [[ ${#paths[@]} -eq 0 ]]; then
+  paths+=(".")
+fi
+
+resolve_path() {
+  if command -v python3 &>/dev/null; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+  elif command -v realpath &>/dev/null; then
+    realpath "$1"
+  elif command -v readlink &>/dev/null && readlink -f / &>/dev/null; then
+    readlink -f "$1"
+  else
+    # Fallback: works for directories
+    (cd "$1" 2>/dev/null && pwd) || echo "$1"
+  fi
+}
+
+main_host="$(resolve_path "${paths[0]}")"
+
+# Capture host HOME for path parity
+HOST_HOME="$HOME"
+HOST_CLAUDE_DIR="${HOST_HOME}/.claude"
+HOST_M2_DIR="${HOST_HOME}/.m2"
+
+# Ensure persistent directories exist on host
+mkdir -p "${HOST_CLAUDE_DIR}" "${HOST_M2_DIR}"
+
+# Build container args separately from claude args
+CLAUDE_MEMORY="${CLAUDE_MEMORY:-8g}"
+container_argv=(
+  docker run --rm -it
+  --memory "${CLAUDE_MEMORY}"
+  --name "claude-docked-$$"
+  -e "HOST_HOME=${HOST_HOME}"
+  -e "HOST_UID=$(id -u)"
+  -e "HOST_GID=$(id -g)"
+  -w "${main_host}"
+  --mount "type=bind,src=${HOST_CLAUDE_DIR},dst=${HOST_HOME}/.claude"
+  --mount "type=bind,src=${HOST_M2_DIR},dst=${HOST_HOME}/.m2"
+  --mount "type=bind,src=${main_host},dst=${main_host}"
+)
+
+# SSH agent forwarding
+# macOS Docker Desktop: use the special bridged socket
+# Linux: mount the actual socket
+if [[ "$(uname)" == "Darwin" ]]; then
+  container_argv+=(
+    --mount "type=bind,src=/run/host-services/ssh-auth.sock,dst=/ssh-agent"
+    -e "SSH_AUTH_SOCK=/ssh-agent"
+  )
+elif [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
+  container_argv+=(
+    -v "${SSH_AUTH_SOCK}:/ssh-agent"
+    -e "SSH_AUTH_SOCK=/ssh-agent"
+  )
+fi
+
+# On Linux, add host.docker.internal mapping (macOS/Windows have it built-in)
+if [[ "$(uname)" == "Linux" ]]; then
+  container_argv+=( --add-host "host.docker.internal:host-gateway" )
+fi
+
+# Share ~/.claude.json via symlink to shared directory (can't bind-mount individual files)
+# See: https://github.com/apple/containerization/issues/79
+# Canonical location is ~/.claude-contained/.claude.json; ~/.claude.json is a symlink to it.
+# All containers access the same file via virtiofs, so Claude Code's own locking works.
+HOST_CLAUDE_CONTAINED="${HOST_HOME}/.claude-contained"
+HOST_CLAUDE_JSON="${HOST_HOME}/.claude.json"
+SHARED_CLAUDE_JSON="${HOST_CLAUDE_CONTAINED}/.claude.json"
+mkdir -p "${HOST_CLAUDE_CONTAINED}"
+
+# Migrate/repair: ensure ~/.claude.json is symlink to shared location
+if [[ -f "$HOST_CLAUDE_JSON" && ! -L "$HOST_CLAUDE_JSON" ]]; then
+  # Host file is regular file (not symlink) - migrate it to shared location
+  # This handles: first run, or host Claude Code replaced symlink via atomic write
+  mv "$HOST_CLAUDE_JSON" "$SHARED_CLAUDE_JSON"
+  ln -s "$SHARED_CLAUDE_JSON" "$HOST_CLAUDE_JSON"
+elif [[ -L "$HOST_CLAUDE_JSON" && ! -e "$SHARED_CLAUDE_JSON" ]]; then
+  # Symlink exists but target doesn't - broken symlink, remove it
+  rm "$HOST_CLAUDE_JSON"
+fi
+
+# Ensure symlink exists (if shared file exists but no symlink yet)
+if [[ ! -e "$HOST_CLAUDE_JSON" && -f "$SHARED_CLAUDE_JSON" ]]; then
+  ln -s "$SHARED_CLAUDE_JSON" "$HOST_CLAUDE_JSON"
+fi
+
+# Mount the shared directory for bidirectional ~/.claude.json access
+container_argv+=( --mount "type=bind,src=${HOST_CLAUDE_CONTAINED},dst=${HOST_CLAUDE_CONTAINED}" )
+
+claude_argv=(claude)
+
+# Additional mounts at original host paths
+for p in "${paths[@]:1}"; do
+  hp="$(resolve_path "$p")"
+  container_argv+=( --mount "type=bind,src=${hp},dst=${hp}" )
+  claude_argv+=( --add-dir "${hp}" )
+done
+
+# Append user's claude args
+if [[ ${#claude_args[@]} -gt 0 ]]; then
+  claude_argv+=( "${claude_args[@]}" )
+fi
+
+# Run container
+if [[ $shell_mode -eq 1 ]]; then
+  exec "${container_argv[@]}" claude-contained:latest bash
+else
+  exec "${container_argv[@]}" claude-contained:latest "${claude_argv[@]}"
+fi
