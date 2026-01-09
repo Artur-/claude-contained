@@ -10,8 +10,9 @@ Description:
   Runs Claude Code inside an Apple Containers sandbox.
 
 Options:
-  -s, --shell    Start a bash shell instead of Claude Code (for debugging)
-  -h, --help     Show this help message
+  -p HOST:CONTAINER  Publish container port to host (can be repeated)
+  -s, --shell        Start a bash shell instead of Claude Code (for debugging)
+  -h, --help         Show this help message
 
 Behavior:
   - If no directories are provided, defaults to the current directory.
@@ -28,6 +29,8 @@ Examples:
   claude-contained -- --help
   claude-contained -s                  # Debug shell in current directory
   claude-contained -s ./my-project     # Debug shell with specific directory
+  claude-contained -p 8080:8080 .      # Expose port 8080
+  claude-contained -p 8080:8080 -p 3000:3000 -s  # Multiple ports with shell
 EOF
 }
 
@@ -36,11 +39,25 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+# Parse flags (can appear in any order)
 shell_mode=0
-if [[ "${1:-}" == "-s" || "${1:-}" == "--shell" ]]; then
-  shell_mode=1
-  shift
-fi
+port_maps=()
+while [[ "${1:-}" == -* ]]; do
+  case "${1:-}" in
+    -s|--shell)
+      shell_mode=1
+      shift
+      ;;
+    -p)
+      shift
+      port_maps+=("$1")
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # Ensure container system is running
 if ! container system status &>/dev/null; then
@@ -111,6 +128,11 @@ container_argv=(
   --mount "type=bind,src=${HOST_M2_DIR},dst=${HOST_HOME}/.m2"
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
+
+# Add port mappings
+for pm in "${port_maps[@]}"; do
+  container_argv+=( -p "$pm" )
+done
 
 # Share ~/.claude.json via symlink to shared directory (can't bind-mount individual files)
 # See: https://github.com/apple/containerization/issues/79

@@ -50,6 +50,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 
 | Flag | Description |
 |------|-------------|
+| `-p HOST:CONTAINER` | Publish container port to host (can be repeated) |
 | `-s`, `--shell` | Start a bash shell instead of Claude Code (for debugging) |
 | `-h`, `--help` | Show help message |
 
@@ -69,6 +70,8 @@ claude-contained . -- --model sonnet --verbose      # Pass args to Claude
 claude-contained --help                             # Show help
 claude-contained -s                                 # Debug shell in current directory
 claude-contained -s ./my-project                    # Debug shell with specific directory
+claude-contained -p 8080:8080 .                     # Expose port 8080
+claude-contained -p 8080:8080 -p 3000:3000 -s       # Multiple ports with shell
 ```
 
 ## Accessing Host Services
