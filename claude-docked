@@ -13,6 +13,7 @@ Options:
   -H PORT[:HOSTPORT] Forward host port to container localhost (can be repeated)
   -p HOST:CONTAINER  Publish container port to host (can be repeated)
   -s, --shell        Start a bash shell instead of Claude Code (for debugging)
+  -y, --yolo         Skip all permission prompts (--dangerously-skip-permissions)
   -h, --help         Show this help message
 
 Behavior:
@@ -47,12 +48,17 @@ fi
 
 # Parse flags (can appear in any order)
 shell_mode=0
+yolo_mode=0
 port_maps=()
 host_forwards=()
 while [[ "${1:-}" == -* ]]; do
   case "${1:-}" in
     -s|--shell)
       shell_mode=1
+      shift
+      ;;
+    -y|--yolo)
+      yolo_mode=1
       shift
       ;;
     -p)
@@ -194,6 +200,11 @@ fi
 container_argv+=( --mount "type=bind,src=${HOST_CLAUDE_CONTAINED},dst=${HOST_CLAUDE_CONTAINED}" )
 
 claude_argv=(claude)
+
+# Add yolo mode flag
+if [[ $yolo_mode -eq 1 ]]; then
+  claude_argv+=( --dangerously-skip-permissions )
+fi
 
 # Additional mounts at original host paths
 for p in "${paths[@]:1}"; do

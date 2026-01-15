@@ -29,7 +29,9 @@ claude-contained . -- --model sonnet
 
 ### Key Files
 
-- **claude-contained** - Main bash entry point. Handles argument parsing, path resolution (with Python3/realpath/readlink fallbacks), and container execution with full path parity.
+- **claude-contained** - Main bash entry point for Apple Containers. Handles argument parsing, path resolution (with Python3/realpath/readlink fallbacks), and container execution with full path parity.
+
+- **claude-docked** - Docker equivalent of claude-contained. **Must be kept in sync with claude-contained** to maintain feature parity. Both scripts share the same flag interface and behavior.
 
 - **Dockerfile** - Builds on Node 20 (Debian Bookworm). Installs JetBrains Runtime 21, HotswapAgent, Claude Code npm package, ripgrep, Python 3. Creates entrypoint.sh that configures `host.local` for host service access, matches host UID/GID, and sets up path parity.
 
@@ -50,6 +52,7 @@ claude-contained . -- --model sonnet
 - Entrypoint dynamically adjusts UID/GID to match host user (handles conflicts)
 - Strict bash error handling with `set -euo pipefail`
 - `--` separator distinguishes directory arguments from Claude Code arguments
+- **Script parity**: `claude-contained` and `claude-docked` should always be updated together when adding/changing flags or behavior to maintain feature parity across both container runtimes
 
 ## Known Caveats
 

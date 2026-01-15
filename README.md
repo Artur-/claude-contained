@@ -53,6 +53,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
 | `-H PORT[:HOSTPORT]` | Forward host port to container localhost (can be repeated) |
 | `-p HOST:CONTAINER` | Publish container port to host (can be repeated) |
 | `-s`, `--shell` | Start a bash shell instead of Claude Code (for debugging) |
+| `-y`, `--yolo` | Skip all permission prompts (`--dangerously-skip-permissions`) |
 | `-h`, `--help` | Show help message |
 
 ### Behavior
@@ -75,6 +76,7 @@ claude-contained -p 8080:8080 .                     # Expose port 8080
 claude-contained -p 8080:8080 -p 3000:3000 -s       # Multiple ports with shell
 claude-contained -H 3845 .                          # Forward host:3845 to container
 claude-contained -H 3845 -H 8080 .                  # Forward multiple host ports
+claude-contained --yolo .                           # Skip all permission prompts
 ```
 
 ## Accessing Host Services
