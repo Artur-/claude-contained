@@ -4,37 +4,37 @@ set -euo pipefail
 show_help() {
   cat <<'EOF'
 Usage:
-  claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
+  claude-contained [options] [main_dir] [extra_dir ...] [-- <tool args...>]
 
 Description:
-  Runs Claude Code inside an Apple Containers sandbox.
+  Runs AI coding assistants inside an Apple Containers sandbox.
 
 Options:
+  -t, --tool TOOL    AI tool to run: claude (default), codex, gemini, vibe
   -H PORT[:HOSTPORT] Forward host port to container localhost (can be repeated)
   -p HOST:CONTAINER  Publish container port to host (can be repeated)
-  -s, --shell        Start a bash shell instead of Claude Code (for debugging)
-  -y, --yolo         Skip all permission prompts (--dangerously-skip-permissions)
+  -s, --shell        Start a bash shell instead of the AI tool (for debugging)
+  -y, --yolo         Skip all permission prompts (tool-specific flag)
   -h, --help         Show this help message
 
 Behavior:
   - If no directories are provided, defaults to the current directory.
   - Directories are mounted at their original host paths for full path parity.
-  - Additional directories are automatically added to Claude using --add-dir.
-  - Claude state (~/.claude) and Maven cache (~/.m2) are bind-mounted for persistence.
+  - Additional directories are automatically added via --add-dir (claude, codex only).
+  - Tool configs (~/.claude, ~/.codex, ~/.gemini, ~/.vibe) and Maven cache (~/.m2) are bind-mounted.
   - SSH agent is forwarded (--ssh).
 
 Examples:
-  claude-contained
-  claude-contained .
-  claude-contained . ../other/project ../shared/lib
-  claude-contained . ../other/project -- --model sonnet --verbose
-  claude-contained -- --help
+  claude-contained                     # Run claude in current directory
+  claude-contained -t codex .          # Run codex instead
+  claude-contained -t gemini .         # Run gemini instead
+  claude-contained -t vibe .           # Run vibe instead
+  claude-contained . ../other/project  # Mount extra directories
+  claude-contained . -- --model sonnet # Pass args to tool
+  claude-contained -y -t codex .       # Codex with --yolo
   claude-contained -s                  # Debug shell in current directory
-  claude-contained -s ./my-project     # Debug shell with specific directory
   claude-contained -p 8080:8080 .      # Expose port 8080
-  claude-contained -p 8080:8080 -p 3000:3000 -s  # Multiple ports with shell
   claude-contained -H 3845 .           # Forward host:3845 to container localhost:3845
-  claude-contained -H 3845 -H 8080 .   # Forward multiple host ports
 EOF
 }
 
@@ -46,6 +46,7 @@ fi
 # Parse flags (can appear in any order)
 shell_mode=0
 yolo_mode=0
+tool="claude"
 port_maps=()
 host_forwards=()
 while [[ "${1:-}" == -* ]]; do
@@ -56,6 +57,11 @@ while [[ "${1:-}" == -* ]]; do
       ;;
     -y|--yolo)
       yolo_mode=1
+      shift
+      ;;
+    -t|--tool)
+      shift
+      tool="$1"
       shift
       ;;
     -p)
@@ -84,9 +90,9 @@ if [[ $# -eq 0 ]]; then
   set -- "."
 fi
 
-# Split directories (before --) vs Claude args (after --)
+# Split directories (before --) vs tool args (after --)
 paths=()
-claude_args=()
+tool_args=()
 seen_sep=0
 for a in "$@"; do
   if [[ "$a" == "--" ]]; then
@@ -96,7 +102,7 @@ for a in "$@"; do
   if [[ $seen_sep -eq 0 ]]; then
     paths+=("$a")
   else
-    claude_args+=("$a")
+    tool_args+=("$a")
   fi
 done
 
@@ -123,12 +129,15 @@ main_host="$(resolve_path "${paths[0]}")"
 # Capture host HOME for path parity
 HOST_HOME="$HOME"
 HOST_CLAUDE_DIR="${HOST_HOME}/.claude"
+HOST_CODEX_DIR="${HOST_HOME}/.codex"
+HOST_GEMINI_DIR="${HOST_HOME}/.gemini"
+HOST_VIBE_DIR="${HOST_HOME}/.vibe"
 HOST_M2_DIR="${HOST_HOME}/.m2"
 
 # Ensure persistent directories exist on host
-mkdir -p "${HOST_CLAUDE_DIR}" "${HOST_M2_DIR}"
+mkdir -p "${HOST_CLAUDE_DIR}" "${HOST_CODEX_DIR}" "${HOST_GEMINI_DIR}" "${HOST_VIBE_DIR}" "${HOST_M2_DIR}"
 
-# Build container args separately from claude args
+# Build container args
 CLAUDE_MEMORY="${CLAUDE_MEMORY:-8g}"
 container_argv=(
   container run --rm -it
@@ -140,6 +149,9 @@ container_argv=(
   -e "HOST_GID=$(id -g)"
   -w "${main_host}"
   --mount "type=bind,src=${HOST_CLAUDE_DIR},dst=${HOST_HOME}/.claude"
+  --mount "type=bind,src=${HOST_CODEX_DIR},dst=${HOST_HOME}/.codex"
+  --mount "type=bind,src=${HOST_GEMINI_DIR},dst=${HOST_HOME}/.gemini"
+  --mount "type=bind,src=${HOST_VIBE_DIR},dst=${HOST_HOME}/.vibe"
   --mount "type=bind,src=${HOST_M2_DIR},dst=${HOST_HOME}/.m2"
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
@@ -183,28 +195,47 @@ fi
 # Mount the shared directory for bidirectional ~/.claude.json access
 container_argv+=( --mount "type=bind,src=${HOST_CLAUDE_CONTAINED},dst=${HOST_CLAUDE_CONTAINED}" )
 
-claude_argv=(claude)
-
-# Add yolo mode flag
-if [[ $yolo_mode -eq 1 ]]; then
-  claude_argv+=( --dangerously-skip-permissions )
-fi
+# Build tool-specific command
+case "$tool" in
+  claude)
+    tool_argv=(claude)
+    [[ $yolo_mode -eq 1 ]] && tool_argv+=(--dangerously-skip-permissions)
+    ;;
+  codex)
+    tool_argv=(codex)
+    [[ $yolo_mode -eq 1 ]] && tool_argv+=(--yolo)
+    ;;
+  gemini)
+    tool_argv=(gemini)
+    [[ $yolo_mode -eq 1 ]] && tool_argv+=(--yolo)
+    ;;
+  vibe)
+    tool_argv=(vibe)
+    [[ $yolo_mode -eq 1 ]] && tool_argv+=(--auto-approve)
+    ;;
+  *)
+    echo "Unknown tool: $tool" >&2
+    echo "Supported tools: claude, codex, gemini, vibe" >&2
+    exit 1
+    ;;
+esac
 
 # Additional mounts at original host paths
 for p in "${paths[@]:1}"; do
   hp="$(resolve_path "$p")"
   container_argv+=( --mount "type=bind,src=${hp},dst=${hp}" )
-  claude_argv+=( --add-dir "${hp}" )
+  # Only claude and codex support --add-dir
+  [[ "$tool" == "claude" || "$tool" == "codex" ]] && tool_argv+=( --add-dir "${hp}" )
 done
 
-# Append user's claude args
-if [[ ${#claude_args[@]} -gt 0 ]]; then
-  claude_argv+=( "${claude_args[@]}" )
+# Append user's tool args
+if [[ ${#tool_args[@]} -gt 0 ]]; then
+  tool_argv+=( "${tool_args[@]}" )
 fi
 
 # Run container
 if [[ $shell_mode -eq 1 ]]; then
   exec "${container_argv[@]}" claude-contained:latest bash
 else
-  exec "${container_argv[@]}" claude-contained:latest "${claude_argv[@]}"
+  exec "${container_argv[@]}" claude-contained:latest "${tool_argv[@]}"
 fi

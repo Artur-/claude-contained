@@ -81,13 +81,23 @@ RUN set -eux; \
     rm -f /tmp/jdtls.tar.gz; \
     ln -s /opt/jdtls/bin/jdtls /usr/local/bin/jdtls
 
-# ---- Claude Code + Language Servers -----------------------------------------
+# ---- Claude Code + Language Servers + AI CLIs ------------------------------
 RUN npm install -g \
     @anthropic-ai/claude-code \
+    @google/gemini-cli \
+    @openai/codex \
     typescript \
     typescript-language-server \
     pyright \
   && npm cache clean --force
+
+# ---- Mistral Vibe (requires Python 3.12+, use uv for version management) ---
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
+ENV UV_TOOL_DIR=/opt/uv-tools
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+  && /root/.local/bin/uv tool install mistral-vibe --python 3.12 \
+  && chmod -R a+rX /opt/uv-tools /opt/uv-python
 
 # ---- Playwright browser (build-time install for reliability) ----------------
 # Install Chromium to a fixed location instead of user cache for container use
