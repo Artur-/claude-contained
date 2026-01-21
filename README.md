@@ -1,6 +1,6 @@
 # Claude Code Contained
 
-Run Claude Code inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state. Also works with Docker via `claude-docked`.
+Run AI coding assistants (Claude, Codex, Gemini, Vibe) inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state. Also works with Docker via `claude-docked`.
 
 There are some caveats:
 
@@ -43,40 +43,56 @@ There are some caveats:
 ## Usage
 
 ```
-claude-contained [options] [main_dir] [extra_dir ...] [-- <claude args...>]
+claude-contained [options] [main_dir] [extra_dir ...] [-- <tool args...>]
 ```
 
 ### Options
 
 | Flag | Description |
 |------|-------------|
+| `-t`, `--tool TOOL` | AI tool to run: `claude` (default), `codex`, `gemini`, `vibe` |
 | `-H PORT[:HOSTPORT]` | Forward host port to container localhost (can be repeated) |
 | `-p HOST:CONTAINER` | Publish container port to host (can be repeated) |
-| `-s`, `--shell` | Start a bash shell instead of Claude Code (for debugging) |
-| `-y`, `--yolo` | Skip all permission prompts (`--dangerously-skip-permissions`) |
+| `-s`, `--shell` | Start a bash shell instead of the AI tool (for debugging) |
+| `-y`, `--yolo` | Skip all permission prompts (tool-specific flag) |
 | `-h`, `--help` | Show help message |
+
+### Supported Tools
+
+| Tool | Command | Yolo Flag | Config Dir |
+|------|---------|-----------|------------|
+| [Claude Code](https://claude.ai/code) | `claude` | `--dangerously-skip-permissions` | `~/.claude` |
+| [OpenAI Codex](https://github.com/openai/codex) | `codex` | `--yolo` | `~/.codex` |
+| [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `--yolo` | `~/.gemini` |
+| [Mistral Vibe](https://github.com/mistralai/mistral-vibe) | `vibe` | `--auto-approve` | `~/.vibe` |
+
+All config directories are bind-mounted regardless of which tool you run.
 
 ### Behavior
 
-- First directory is mounted at `/work/<project-name>` (working directory)
-- Additional directories are mounted as `/work/extraN` and auto-added to Claude via `--add-dir`
-- State is persisted in `claude_state` volume (auto-created on first run)
+- First directory is the working directory
+- Additional directories are mounted and auto-added via `--add-dir` (Claude and Codex only)
+- Tool configs and Maven cache (`~/.m2`) are bind-mounted for persistence
 - SSH agent is forwarded automatically
 
 ### Examples
 
 ```bash
-claude-contained                                    # Current directory
+# Tool selection
+claude-contained                                    # Claude (default)
+claude-contained -t codex .                         # OpenAI Codex
+claude-contained -t gemini .                        # Google Gemini CLI
+claude-contained -t vibe .                          # Mistral Vibe
+
+# Common usage
 claude-contained . ../other/project                 # Multiple directories
-claude-contained . -- --model sonnet --verbose      # Pass args to Claude
-claude-contained --help                             # Show help
-claude-contained -s                                 # Debug shell in current directory
-claude-contained -s ./my-project                    # Debug shell with specific directory
+claude-contained . -- --model sonnet --verbose      # Pass args to tool
+claude-contained -y -t codex .                      # Codex with --yolo
+claude-contained -s                                 # Debug shell
+
+# Port forwarding
 claude-contained -p 8080:8080 .                     # Expose port 8080
-claude-contained -p 8080:8080 -p 3000:3000 -s       # Multiple ports with shell
 claude-contained -H 3845 .                          # Forward host:3845 to container
-claude-contained -H 3845 -H 8080 .                  # Forward multiple host ports
-claude-contained --yolo .                           # Skip all permission prompts
 ```
 
 ## Accessing Host Services
