@@ -134,6 +134,10 @@ HOST_M2_DIR="${HOST_HOME}/.m2"
 # Ensure persistent directories exist on host
 mkdir -p "${HOST_CLAUDE_DIR}" "${HOST_CODEX_DIR}" "${HOST_GEMINI_DIR}" "${HOST_VIBE_DIR}" "${HOST_M2_DIR}"
 
+# Capture Git config for container (if set)
+GIT_USER_NAME="$(git config user.name 2>/dev/null || true)"
+GIT_USER_EMAIL="$(git config user.email 2>/dev/null || true)"
+
 # Build container args
 CLAUDE_MEMORY="${CLAUDE_MEMORY:-8g}"
 container_argv=(
@@ -144,6 +148,24 @@ container_argv=(
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
   -w "${main_host}"
+)
+
+# Add Git config environment variables if set
+if [[ -n "$GIT_USER_NAME" ]]; then
+  container_argv+=(
+    -e "GIT_AUTHOR_NAME=${GIT_USER_NAME}"
+    -e "GIT_COMMITTER_NAME=${GIT_USER_NAME}"
+  )
+fi
+if [[ -n "$GIT_USER_EMAIL" ]]; then
+  container_argv+=(
+    -e "GIT_AUTHOR_EMAIL=${GIT_USER_EMAIL}"
+    -e "GIT_COMMITTER_EMAIL=${GIT_USER_EMAIL}"
+  )
+fi
+
+# Add mounts
+container_argv+=(
   --mount "type=bind,src=${HOST_CLAUDE_DIR},dst=${HOST_HOME}/.claude"
   --mount "type=bind,src=${HOST_CODEX_DIR},dst=${HOST_HOME}/.codex"
   --mount "type=bind,src=${HOST_GEMINI_DIR},dst=${HOST_HOME}/.gemini"
