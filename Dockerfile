@@ -8,7 +8,7 @@ ARG JBR_FLAVOR=jbr
 ARG JBR_BASE_URL=https://cache-redirector.jetbrains.com/intellij-jbr
 
 # ---- HotswapAgent pin (Maven Central) ---------------------------------------
-ARG HOTSWAP_AGENT_VERSION=2.0.2
+ARG HOTSWAP_AGENT_VERSION=2.0.3
 
 # ---- Eclipse JDT Language Server pin ----------------------------------------
 ARG JDTLS_VERSION=1.40.0
