@@ -186,6 +186,13 @@ if [ -n "${HOST_HOME:-}" ]; then
     ln -s "${SHARED_CLAUDE_JSON}" "${HOST_HOME}/.claude.json"
     chown -h dev:dev "${HOST_HOME}/.claude.json" 2>/dev/null || true
   fi
+
+  # Copy .gitconfig for git commit identity (read-only, no sync back needed)
+  SHARED_GITCONFIG="${HOST_HOME}/.claude-contained/.gitconfig"
+  if [ -e "${SHARED_GITCONFIG}" ] && [ ! -e "${HOST_HOME}/.gitconfig" ]; then
+    cp "${SHARED_GITCONFIG}" "${HOST_HOME}/.gitconfig"
+    chown dev:dev "${HOST_HOME}/.gitconfig" 2>/dev/null || true
+  fi
 fi
 
 # Drop to dev user (or stay root if STAY_ROOT=1)

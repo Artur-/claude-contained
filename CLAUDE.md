@@ -48,7 +48,7 @@ claude-contained -y -t codex .
 - **HOME parity**: Container HOME matches host HOME for consistent behavior
 - **UID/GID matching**: Container user matches host user IDs for proper file permissions
 - **State sharing**: Tool configs (`~/.claude`, `~/.codex`, `~/.gemini`, `~/.vibe`) bind-mounted from host
-- SSH agent forwarding enabled
+- **SSH agent forwarding**: Disabled by default for security; enable with `-S/--ssh` flag (required for `git push` to SSH remotes)
 - Host services accessible via `host.local` hostname (resolved from container gateway IP)
 
 ### Notable Patterns
