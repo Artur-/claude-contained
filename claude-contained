@@ -17,6 +17,7 @@ Options:
   -S, --ssh          Enable SSH agent forwarding (for git push)
   -w, --worktree     Auto-include git worktree's main repository (skip prompt)
   -y, --yolo         Skip all permission prompts (tool-specific flag)
+  -a, --attach [NAME]  Attach to running container (interactive list if omitted)
   -h, --help         Show this help message
 
 Behavior:
@@ -39,6 +40,8 @@ Examples:
   claude-contained -s                  # Debug shell in current directory
   claude-contained -p 8080:8080 .      # Expose port 8080
   claude-contained -H 3845 .           # Forward host:3845 to container localhost:3845
+  claude-contained -a                  # List and attach to running container
+  claude-contained -a claude-contained-12345  # Attach to specific container
 EOF
 }
 
@@ -52,6 +55,8 @@ shell_mode=0
 ssh_mode=0
 worktree_mode=0
 yolo_mode=0
+attach_mode=0
+attach_name=""
 tool="claude"
 port_maps=()
 host_forwards=()
@@ -88,6 +93,15 @@ while [[ "${1:-}" == -* ]]; do
       host_forwards+=("$1")
       shift
       ;;
+    -a|--attach)
+      attach_mode=1
+      shift
+      # If next arg exists and doesn't start with - and isn't a path, treat as container name
+      if [[ -n "${1:-}" && "${1:-}" != -* && "${1:-}" != */* && "${1:-}" != "." ]]; then
+        attach_name="$1"
+        shift
+      fi
+      ;;
     *)
       break
       ;;
@@ -101,6 +115,57 @@ if ! container system status &>/dev/null; then
     [Yy]* ) container system start ;;
     * ) echo "Aborted."; exit 1 ;;
   esac
+fi
+
+# Handle attach mode
+if [[ $attach_mode -eq 1 ]]; then
+  # Get running containers with our prefix
+  prefix="claude-contained-"
+  containers=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && containers+=("$line")
+  done < <(container list --quiet 2>/dev/null | grep "^${prefix}" || true)
+
+  if [[ -z "$attach_name" ]]; then
+    # Interactive mode
+    if [[ ${#containers[@]} -eq 0 ]]; then
+      echo "No running claude-contained containers"
+      exit 0
+    fi
+
+    echo "Running containers:"
+    for i in "${!containers[@]}"; do
+      echo "  $((i+1))) ${containers[$i]}"
+    done
+    echo ""
+    read -p "Select container (1-${#containers[@]}, q to quit): " choice
+
+    # Handle quit
+    if [[ -z "$choice" || "$choice" == "q" || "$choice" == "Q" ]]; then
+      exit 0
+    fi
+
+    # Validate selection
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#containers[@]} )); then
+      echo "Invalid selection" >&2
+      exit 1
+    fi
+
+    attach_name="${containers[$((choice-1))]}"
+  else
+    # Direct mode - validate container exists
+    if [[ ${#containers[@]} -eq 0 ]] || ! printf '%s\n' "${containers[@]}" | grep -qx "$attach_name"; then
+      echo "Container '$attach_name' not found" >&2
+      if [[ ${#containers[@]} -gt 0 ]]; then
+        echo "Running containers: ${containers[*]}"
+      else
+        echo "No running claude-contained containers"
+      fi
+      exit 1
+    fi
+  fi
+
+  exec container exec -it "$attach_name" bash
 fi
 
 if [[ $# -eq 0 ]]; then
