@@ -41,8 +41,27 @@ Examples:
   claude-contained -p 8080:8080 .      # Expose port 8080
   claude-contained -H 3845 .           # Forward host:3845 to container localhost:3845
   claude-contained -a                  # List and attach to running container
-  claude-contained -a claude-contained-12345  # Attach to specific container
+  claude-contained -a myproject-1732   # Attach to specific container (prefix optional)
 EOF
+}
+
+# Sanitize folder name for container naming
+# - Extract basename
+# - Lowercase
+# - Replace non-alphanumeric with dash
+# - Collapse multiple dashes
+# - Truncate to max 20 chars
+# - Handle empty result
+sanitize_foldername() {
+  local name
+  name="$(basename "$1" | tr '[:upper:]' '[:lower:]')"  # lowercase (portable)
+  name="$(echo "$name" | sed 's/[^a-z0-9]/-/g')"        # non-alphanumeric → dash
+  name="$(echo "$name" | sed 's/-\{1,\}/-/g')"          # collapse dashes
+  name="${name#-}"                                       # trim leading dash
+  name="${name%-}"                                       # trim trailing dash
+  name="$(echo "$name" | cut -c1-20)"                   # truncate (portable)
+  [[ -z "$name" ]] && name="root"                       # fallback
+  echo "$name"
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -135,7 +154,9 @@ if [[ $attach_mode -eq 1 ]]; then
 
     echo "Running containers:"
     for i in "${!containers[@]}"; do
-      echo "  $((i+1))) ${containers[$i]}"
+      # Display without prefix for cleaner output
+      display_name="${containers[$i]#${prefix}}"
+      echo "  $((i+1))) ${display_name}"
     done
     echo ""
     read -p "Select container (1-${#containers[@]}, q to quit): " choice
@@ -153,11 +174,20 @@ if [[ $attach_mode -eq 1 ]]; then
 
     attach_name="${containers[$((choice-1))]}"
   else
-    # Direct mode - validate container exists
+    # Direct mode - prepend prefix if not present
+    if [[ "$attach_name" != ${prefix}* ]]; then
+      attach_name="${prefix}${attach_name}"
+    fi
+    # Validate container exists
     if [[ ${#containers[@]} -eq 0 ]] || ! printf '%s\n' "${containers[@]}" | grep -qx "$attach_name"; then
       echo "Container '$attach_name' not found" >&2
       if [[ ${#containers[@]} -gt 0 ]]; then
-        echo "Running containers: ${containers[*]}"
+        # Show names without prefix
+        echo -n "Running containers:"
+        for c in "${containers[@]}"; do
+          echo -n " ${c#${prefix}}"
+        done
+        echo ""
       else
         echo "No running claude-contained containers"
       fi
@@ -260,10 +290,13 @@ mkdir -p "${HOST_CLAUDE_DIR}" "${HOST_CODEX_DIR}" "${HOST_GEMINI_DIR}" "${HOST_V
 
 # Build container args
 CLAUDE_MEMORY="${CLAUDE_MEMORY:-8g}"
+container_folder="$(sanitize_foldername "$main_host")"
+container_time="$(date +%H%M)"
+container_name="claude-contained-${container_folder}-${container_time}"
 container_argv=(
   container run --rm -it
   --memory "${CLAUDE_MEMORY}"
-  --name "claude-contained-$$"
+  --name "$container_name"
   -e "HOST_HOME=${HOST_HOME}"
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
