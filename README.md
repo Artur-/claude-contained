@@ -54,6 +54,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <tool args...>]
 | `-H PORT[:HOSTPORT]` | Forward host port to container localhost (can be repeated) |
 | `-p HOST:CONTAINER` | Publish container port to host (can be repeated) |
 | `-s`, `--shell` | Start a bash shell instead of the AI tool (for debugging) |
+| `-S`, `--ssh` | Enable SSH agent forwarding (for git push) |
 | `-y`, `--yolo` | Skip all permission prompts (tool-specific flag) |
 | `-h`, `--help` | Show help message |
 

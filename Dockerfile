@@ -81,15 +81,33 @@ RUN set -eux; \
     rm -f /tmp/jdtls.tar.gz; \
     ln -s /opt/jdtls/bin/jdtls /usr/local/bin/jdtls
 
-# ---- Claude Code + Language Servers + AI CLIs ------------------------------
+# ---- Language Servers + AI CLIs --------------------------------------------
 RUN npm install -g \
-    @anthropic-ai/claude-code \
     @google/gemini-cli \
     @openai/codex \
     typescript \
     typescript-language-server \
     pyright \
   && npm cache clean --force
+
+# ---- Native Claude Code binary ----------------------------------------------
+# Download native binary to /opt/claude/ (runtime creates user symlinks)
+ARG CLAUDE_VERSION=latest
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "$ARCH" in \
+      arm64)  CLAUDE_PLATFORM="linux-arm64" ;; \
+      amd64)  CLAUDE_PLATFORM="linux-x64" ;; \
+      *)      echo "Unsupported architecture: $ARCH"; exit 1 ;; \
+    esac; \
+    GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"; \
+    if [ "$CLAUDE_VERSION" = "latest" ]; then \
+      CLAUDE_VERSION=$(curl -fsSL "$GCS_BUCKET/latest"); \
+    fi; \
+    mkdir -p /opt/claude; \
+    curl -fsSL "$GCS_BUCKET/$CLAUDE_VERSION/$CLAUDE_PLATFORM/claude" -o /opt/claude/claude; \
+    chmod +x /opt/claude/claude; \
+    /opt/claude/claude --version
 
 # ---- Mistral Vibe (requires Python 3.12+, use uv for version management) ---
 ENV UV_TOOL_BIN_DIR=/usr/local/bin
@@ -124,7 +142,7 @@ RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
 set -e
 
 export JAVA_HOME=/opt/jbr
-export PATH="$JAVA_HOME/bin:$PATH"
+export PATH="/opt/claude:$JAVA_HOME/bin:$PATH"
 
 # Add host.local pointing to host machine
 # Docker Desktop (macOS/Windows): use host.docker.internal
@@ -193,16 +211,26 @@ if [ -n "${HOST_HOME:-}" ]; then
     cp "${SHARED_GITCONFIG}" "${HOST_HOME}/.gitconfig"
     chown dev:dev "${HOST_HOME}/.gitconfig" 2>/dev/null || true
   fi
+
+  # Create native Claude symlink structure (satisfies installMethod: native in shared config)
+  mkdir -p "${HOST_HOME}/.local/bin" 2>/dev/null || true
+  if [ ! -e "${HOST_HOME}/.local/bin/claude" ]; then
+    ln -sf /opt/claude/claude "${HOST_HOME}/.local/bin/claude"
+  fi
+  chown -R dev:dev "${HOST_HOME}/.local" 2>/dev/null || true
 fi
 
 # Drop to dev user (or stay root if STAY_ROOT=1)
 if [ "$(id -u)" = "0" ] && [ "${STAY_ROOT:-}" != "1" ]; then
+  USER_HOME="${HOME:-/home/dev}"
   exec gosu dev env \
     JAVA_HOME="$JAVA_HOME" \
-    PATH="$PATH" \
-    HOME="${HOME:-/home/dev}" \
+    PATH="${USER_HOME}/.local/bin:$PATH" \
+    HOME="$USER_HOME" \
     "$@"
 else
+  # Also update PATH for root/non-gosu case
+  export PATH="${HOME}/.local/bin:$PATH"
   exec "$@"
 fi
 EOF
