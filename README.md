@@ -1,12 +1,15 @@
-# Claude Code Contained
+# AI Contained
 
-Run AI coding assistants (Claude, Codex, Gemini, Vibe) inside an [Apple Container](https://github.com/apple/container) sandbox with persistent state. Also works with Docker via `claude-docked`.
+Seamlessly run CLI coding agents (Claude, Codex, Gemini, Vibe) inside an [Apple Container](https://github.com/apple/container) or [Docker](https://www.docker.com) container with persistent state. 
+
+The main goal is to provide a seamless experience; `alias claude='claude-contained --yolo'` and now `claude` runs in a container with your settings. Only `.` or the folders you specify are shared with the container.
+History is retained (even if you switch back to un-contained `claude`). 
 
 There are some caveats:
 
-- **Host localhost access**: `-H PORT` works with `claude-docked` (Docker) but not `claude-contained` (Apple Containers) for services bound to localhost. See [Accessing Host Services](#accessing-host-services).
-- **`~/.claude.json` is relocated**: On first run, your `~/.claude.json` is moved to `~/.claude-contained/.claude.json` and replaced with a symlink. This allows containers to share the file. **If you delete `~/.claude-contained/`, you will lose your Claude credentials and settings.**
-- **Don't mix contained and uncontained**: Running `claude-contained` and regular `claude` simultaneously may cause issues, as both access the same config file but through different paths. Run one or the other, not both at once.
+- **Host localhost access**: `-H PORT` works with `claude-docked` (Docker) but not `claude-contained` (Apple Containers) for services bound to localhost. See [Accessing Host Services](#accessing-host-services). (Apple Containers seems to be gaining support soon.)
+- **`~/.claude.json` is relocated**: On first run, your `~/.claude.json` is moved to `~/.claude-contained/.claude.json` and replaced with a symlink. This allows containers to share the file. **If you delete `~/.claude-contained/`, you will lose your Claude credentials and some settings.** You'll have to log in again. This is a limitation on how files can be shared with the container. 
+- **Don't mix contained and uncontained at the same time**: Running `claude-contained` and regular `claude` simultaneously may cause issues, as both access the same config file but through different paths. Run one or the other, not both at once. This will be fixed in the future. 
 
 ## Quick Start
 
@@ -17,9 +20,15 @@ There are some caveats:
    container build --platform linux/arm64 -t claude-contained .
    ```
 
-2. Put `claude-contained` somewhere on your PATH (e.g., `/usr/local/bin`), optionally aliasing to `claude`.
+2. Put `claude-contained` somewhere on your PATH, optionally aliasing to `claude`.
+   ```
+   alias claude='claude-contained --yolo'
+   alias vibe='claude-contained -t vibe --yolo'
+   alias codex='claude-contained -t codex --yolo'
+   alias gemini='claude-contained -t gemini --yolo'
+   ```
 
-3. Run:
+4. Run:
    ```bash
    claude-contained              # Current directory
    claude-contained ./my-project # Specific directory
