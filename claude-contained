@@ -89,8 +89,11 @@ done
 
 # Ensure container system is running
 if ! container system status &>/dev/null; then
-  echo "Starting container system..."
-  container system start
+  read -p "Container system is not running. Start it? [Y/n] " answer
+  case "${answer:-Y}" in
+    [Yy]* ) container system start ;;
+    * ) echo "Aborted."; exit 1 ;;
+  esac
 fi
 
 if [[ $# -eq 0 ]]; then

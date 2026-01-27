@@ -90,6 +90,19 @@ while [[ "${1:-}" == -* ]]; do
   esac
 done
 
+# Ensure Docker is running
+if ! docker info &>/dev/null; then
+  read -p "Docker is not running. Start Docker Desktop? [Y/n] " answer
+  case "${answer:-Y}" in
+    [Yy]* )
+      open -a Docker
+      echo "Waiting for Docker to start..."
+      while ! docker info &>/dev/null; do sleep 1; done
+      ;;
+    * ) echo "Aborted."; exit 1 ;;
+  esac
+fi
+
 if [[ $# -eq 0 ]]; then
   set -- "."
 fi
