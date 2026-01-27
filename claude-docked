@@ -15,6 +15,7 @@ Options:
   -p HOST:CONTAINER  Publish container port to host (can be repeated)
   -s, --shell        Start a bash shell instead of the AI tool (for debugging)
   -S, --ssh          Enable SSH agent forwarding (for git push)
+  -w, --worktree     Auto-include git worktree's main repository (skip prompt)
   -y, --yolo         Skip all permission prompts (tool-specific flag)
   -h, --help         Show this help message
 
@@ -24,6 +25,7 @@ Behavior:
   - Additional directories are automatically added via --add-dir (claude, codex only).
   - Tool configs (~/.claude, ~/.codex, ~/.gemini, ~/.vibe) and Maven cache (~/.m2) are bind-mounted.
   - SSH agent forwarding is disabled by default; use --ssh to enable (for git push).
+  - Git worktrees are detected; main repository is included for full git access.
 
 Examples:
   claude-docked                      # Run claude in current directory
@@ -51,6 +53,7 @@ fi
 # Parse flags (can appear in any order)
 shell_mode=0
 ssh_mode=0
+worktree_mode=0
 yolo_mode=0
 tool="claude"
 port_maps=()
@@ -63,6 +66,10 @@ while [[ "${1:-}" == -* ]]; do
       ;;
     -S|--ssh)
       ssh_mode=1
+      shift
+      ;;
+    -w|--worktree)
+      worktree_mode=1
       shift
       ;;
     -y|--yolo)
@@ -141,7 +148,45 @@ resolve_path() {
   fi
 }
 
+# Detect if directory is a git worktree and return main repo path
+# Returns empty string if not a worktree
+get_worktree_main_repo() {
+  local dir="$1"
+  local git_file="${dir}/.git"
+
+  # Check if .git is a file (worktree) not a directory (regular repo)
+  if [[ -f "$git_file" ]]; then
+    # Use git to find the main repository's .git directory
+    local common_dir
+    common_dir="$(cd "$dir" && git rev-parse --git-common-dir 2>/dev/null)" || return
+
+    # Get the main repo root (parent of .git)
+    if [[ -n "$common_dir" && "$common_dir" != ".git" ]]; then
+      dirname "$(resolve_path "$common_dir")"
+    fi
+  fi
+}
+
 main_host="$(resolve_path "${paths[0]}")"
+
+# Check if main directory is a git worktree
+worktree_main_repo=""
+worktree_main_repo="$(get_worktree_main_repo "$main_host")" || true
+
+if [[ -n "$worktree_main_repo" ]]; then
+  if [[ $worktree_mode -eq 1 ]]; then
+    # Auto-include mode: just inform the user
+    echo "Worktree detected: also including main repository ${worktree_main_repo}"
+  else
+    # Prompt mode: ask the user
+    echo "Working directory is a git worktree linked to: ${worktree_main_repo}"
+    read -p "Include main repository for full git access? [Y/n] " answer
+    case "${answer:-Y}" in
+      [Yy]* ) : ;;  # Continue, will be included
+      * ) worktree_main_repo="" ;;  # Don't include
+    esac
+  fi
+fi
 
 # Capture host HOME for path parity
 HOST_HOME="$HOME"
@@ -172,6 +217,11 @@ container_argv=(
   --mount "type=bind,src=${HOST_M2_DIR},dst=${HOST_HOME}/.m2"
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
+
+# Mount worktree's main repository if needed
+if [[ -n "$worktree_main_repo" ]]; then
+  container_argv+=( --mount "type=bind,src=${worktree_main_repo},dst=${worktree_main_repo}" )
+fi
 
 # Add port mappings
 for pm in "${port_maps[@]+"${port_maps[@]}"}"; do
@@ -272,6 +322,11 @@ for p in "${paths[@]:1}"; do
   # Only claude and codex support --add-dir
   [[ "$tool" == "claude" || "$tool" == "codex" ]] && tool_argv+=( --add-dir "${hp}" )
 done
+
+# Add worktree main repo to agent's folders
+if [[ -n "$worktree_main_repo" ]]; then
+  [[ "$tool" == "claude" || "$tool" == "codex" ]] && tool_argv+=( --add-dir "${worktree_main_repo}" )
+fi
 
 # Append user's tool args
 if [[ ${#tool_args[@]} -gt 0 ]]; then
