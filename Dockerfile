@@ -14,17 +14,33 @@ ARG HOTSWAP_AGENT_VERSION=2.0.3
 ARG JDTLS_VERSION=1.40.0
 ARG JDTLS_TIMESTAMP=202409261450
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git openssh-client ca-certificates ripgrep \
-    curl bash xz-utils unzip \
-    python3 python3-pip python3-venv \
-    iproute2 gosu socat maven \
-    # Playwright/Chromium dependencies (replaces npx playwright install-deps)
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
-    libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \
-    libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 \
-    libxfixes3 libxkbcommon0 libxrandr2 xvfb \
-  && rm -rf /var/lib/apt/lists/*
+# ---- System packages + custom packages (single apt-get update) -------------
+COPY custom-packages.txt /tmp/custom-packages.txt
+RUN set -eux; \
+    # Base packages
+    BASE_PACKAGES=" \
+      git openssh-client ca-certificates ripgrep \
+      curl bash xz-utils unzip \
+      python3 python3-pip python3-venv \
+      iproute2 gosu socat maven \
+      libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
+      libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \
+      libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 \
+      libxfixes3 libxkbcommon0 libxrandr2 xvfb"; \
+    \
+    # Extract custom packages (non-comment, non-empty lines)
+    CUSTOM_PACKAGES=""; \
+    if [ -f /tmp/custom-packages.txt ]; then \
+      CUSTOM_PACKAGES=$(grep -v '^#' /tmp/custom-packages.txt | grep -v '^[[:space:]]*$' | tr '\n' ' ' || true); \
+      echo "Custom packages: [$CUSTOM_PACKAGES]"; \
+      rm -f /tmp/custom-packages.txt; \
+    fi; \
+    \
+    # Single apt-get update for all packages
+    apt-get update && apt-get install -y --no-install-recommends \
+      $BASE_PACKAGES \
+      $CUSTOM_PACKAGES \
+    && rm -rf /var/lib/apt/lists/*
 
 # ---- Install JetBrains Runtime ----------------------------------------------
 RUN set -eux; \

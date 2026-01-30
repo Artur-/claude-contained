@@ -1,0 +1,8 @@
+# Exclude common files not needed in build
+.git
+*.md
+!CLAUDE.md
+*.log
+*.tmp
+*.swp
+*~
