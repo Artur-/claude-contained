@@ -88,6 +88,11 @@ build_attach_cmd() {
   fi
 }
 
+# Environment args for exec (PATH not set by entrypoint when using exec)
+exec_env_args() {
+  printf '%s ' -e "HOME=$HOME" -e "PATH=/opt/claude:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+}
+
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   show_help
   exit 0
@@ -203,10 +208,10 @@ if [[ $attach_mode -eq 1 ]]; then
 
     attach_name="${containers[$((choice-1))]}"
     if [[ $shell_mode -eq 1 ]]; then
-      exec docker exec -it -u dev "$attach_name" bash
+      exec docker exec -it -u dev $(exec_env_args) "$attach_name" bash
     else
       build_attach_cmd
-      exec docker exec -it -u dev "$attach_name" "${attach_cmd[@]}"
+      exec docker exec -it -u dev $(exec_env_args) "$attach_name" "${attach_cmd[@]}"
     fi
   else
     # Direct mode - prepend prefix if not present
@@ -221,10 +226,10 @@ if [[ $attach_mode -eq 1 ]]; then
       # Fall through to create new container
     else
       if [[ $shell_mode -eq 1 ]]; then
-        exec docker exec -it -u dev "$attach_name" bash
+        exec docker exec -it -u dev $(exec_env_args) "$attach_name" bash
       else
         build_attach_cmd
-        exec docker exec -it -u dev "$attach_name" "${attach_cmd[@]}"
+        exec docker exec -it -u dev $(exec_env_args) "$attach_name" "${attach_cmd[@]}"
       fi
     fi
   fi
