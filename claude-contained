@@ -17,7 +17,7 @@ Options:
   -S, --ssh          Enable SSH agent forwarding (for git push)
   -w, --worktree     Auto-include git worktree's main repository (skip prompt)
   -y, --yolo         Skip all permission prompts (tool-specific flag)
-  -a, --attach [NAME]  Attach to running container (interactive list if omitted)
+  -a, --attach [NAME]  Attach to running container (runs tool, or bash with -s)
   -h, --help         Show this help message
 
 Behavior:
@@ -62,6 +62,27 @@ sanitize_foldername() {
   name="$(echo "$name" | cut -c1-20)"                   # truncate (portable)
   [[ -z "$name" ]] && name="root"                       # fallback
   echo "$name"
+}
+
+# Get full executable path for a tool (claude is in /opt/claude, others in standard PATH)
+get_tool_path() {
+  case "$1" in
+    claude) echo "/opt/claude/claude" ;;
+    *)      echo "$1" ;;  # codex/gemini/vibe are in /usr/local/bin (standard PATH)
+  esac
+}
+
+# Build command array for attach mode (tool path + flags)
+# Sets global attach_cmd array
+build_attach_cmd() {
+  attach_cmd=("$(get_tool_path "$tool")")
+  if [[ $yolo_mode -eq 1 ]]; then
+    case "$tool" in
+      claude) attach_cmd+=(--dangerously-skip-permissions) ;;
+      codex|gemini) attach_cmd+=(--yolo) ;;
+      vibe) echo "Warning: vibe does not support yolo mode" >&2 ;;
+    esac
+  fi
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -174,7 +195,12 @@ if [[ $attach_mode -eq 1 ]]; then
     fi
 
     attach_name="${containers[$((choice-1))]}"
-    exec container exec -it "$attach_name" bash
+    if [[ $shell_mode -eq 1 ]]; then
+      exec container exec -it -u dev "$attach_name" bash
+    else
+      build_attach_cmd
+      exec container exec -it -u dev "$attach_name" "${attach_cmd[@]}"
+    fi
   else
     # Direct mode - prepend prefix if not present
     if [[ "$attach_name" != ${prefix}* ]]; then
@@ -187,7 +213,12 @@ if [[ $attach_mode -eq 1 ]]; then
       custom_container_name="${prefix}$(sanitize_foldername "$raw_name")"
       # Fall through to create new container
     else
-      exec container exec -it "$attach_name" bash
+      if [[ $shell_mode -eq 1 ]]; then
+        exec container exec -it -u dev "$attach_name" bash
+      else
+        build_attach_cmd
+        exec container exec -it -u dev "$attach_name" "${attach_cmd[@]}"
+      fi
     fi
   fi
 fi
