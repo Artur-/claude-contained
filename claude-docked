@@ -402,7 +402,7 @@ case "$tool" in
     ;;
   vibe)
     tool_argv=(vibe)
-    [[ $yolo_mode -eq 1 ]] && tool_argv+=(--auto-approve)
+    [[ $yolo_mode -eq 1 ]] && echo "Warning: vibe does not support yolo mode (no equivalent flag)" >&2
     ;;
   *)
     echo "Unknown tool: $tool" >&2
