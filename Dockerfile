@@ -15,7 +15,8 @@ ARG JDTLS_VERSION=1.40.0
 ARG JDTLS_TIMESTAMP=202409261450
 
 # ---- System packages + custom packages (single apt-get update) -------------
-COPY custom-packages.txt /tmp/custom-packages.txt
+# Use glob trick: Dockerfile always exists, custom-packages.txt is optional
+COPY Dockerfile custom-packages.tx[t] /tmp/
 RUN set -eux; \
     # Base packages
     BASE_PACKAGES=" \
