@@ -97,6 +97,27 @@ RUN set -eux; \
     rm -f /tmp/jdtls.tar.gz; \
     ln -s /opt/jdtls/bin/jdtls /usr/local/bin/jdtls
 
+# ---- Install Bun ------------------------------------------------------------
+ARG BUN_VERSION=latest
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "$ARCH" in \
+      arm64)  BUN_ARCH="aarch64" ;; \
+      amd64)  BUN_ARCH="x64" ;; \
+      *)      echo "Unsupported architecture: $ARCH"; exit 1 ;; \
+    esac; \
+    if [ "$BUN_VERSION" = "latest" ]; then \
+      BUN_VERSION=$(curl -fsSL https://api.github.com/repos/oven-sh/bun/releases/latest | grep -oP '"tag_name": "bun-v\K[^"]+'); \
+    fi; \
+    echo "Installing Bun v${BUN_VERSION}"; \
+    URL="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip"; \
+    curl -fL "$URL" -o /tmp/bun.zip; \
+    unzip -q /tmp/bun.zip -d /tmp; \
+    mv /tmp/bun-linux-${BUN_ARCH}/bun /usr/local/bin/bun; \
+    chmod +x /usr/local/bin/bun; \
+    rm -rf /tmp/bun.zip /tmp/bun-linux-${BUN_ARCH}; \
+    bun --version
+
 # ---- Language Servers + AI CLIs --------------------------------------------
 RUN npm install -g \
     @google/gemini-cli \
