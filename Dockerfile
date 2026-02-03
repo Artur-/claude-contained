@@ -2,8 +2,8 @@
 FROM node:20-bookworm-slim
 
 # ---- JBR pins ---------------------------------------------------------------
-ARG JBR_VERSION=21.0.9
-ARG JBR_BUILD=b895.149
+ARG JBR_VERSION=25.0.1
+ARG JBR_BUILD=b268.52
 ARG JBR_FLAVOR=jbr
 ARG JBR_BASE_URL=https://cache-redirector.jetbrains.com/intellij-jbr
 
@@ -85,7 +85,7 @@ disabledPlugins=Hibernate,Logback,Log4j2,Weld,Deltaspike,WebObjects,WildFlyELRes
 vaadin.liveReloadQuietTime=500
 EOF
 
-# HotSwap always on (JBR 17/21 line)
+# HotSwap always on (JBR 17/21/25)
 ENV JAVA_TOOL_OPTIONS="-XX:+AllowEnhancedClassRedefinition -XX:HotswapAgent=fatjar -Dvaadin.productionMode=false -Dspring.devtools.restart.enabled=false"
 
 # ---- Eclipse JDT Language Server (jdtls) ------------------------------------
@@ -151,8 +151,8 @@ RUN set -eux; \
 ENV UV_TOOL_BIN_DIR=/usr/local/bin
 ENV UV_TOOL_DIR=/opt/uv-tools
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-  && /root/.local/bin/uv tool install mistral-vibe --python 3.12 \
+RUN pip install --break-system-packages uv \
+  && uv tool install mistral-vibe --python 3.12 \
   && chmod -R a+rX /opt/uv-tools /opt/uv-python
 
 # ---- Playwright browser (build-time install for reliability) ----------------
