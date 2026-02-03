@@ -151,8 +151,8 @@ RUN set -eux; \
 ENV UV_TOOL_BIN_DIR=/usr/local/bin
 ENV UV_TOOL_DIR=/opt/uv-tools
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
-RUN pip install --break-system-packages uv \
-  && uv tool install mistral-vibe --python 3.12 \
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+  && /root/.local/bin/uv tool install mistral-vibe --python 3.12 \
   && chmod -R a+rX /opt/uv-tools /opt/uv-python
 
 # ---- Playwright browser (build-time install for reliability) ----------------
