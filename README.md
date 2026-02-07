@@ -161,3 +161,46 @@ For services bound to all interfaces (`0.0.0.0`), you can use `host.local` in a 
 }
 ```
 
+## VS Code Devcontainer
+
+Use the claude-contained image as a VS Code devcontainer for Java/Spring/Vaadin development with full IDE features and Claude in the terminal.
+
+### What It Provides
+
+- Full Java IntelliSense, debugging, and Spring Boot support via pre-installed extensions
+- `claude` command available in the integrated terminal
+- **Path parity**: Your project stays at its original path (not `/workspaces/project`)
+- Maven cache and git config shared with host
+
+### Setup
+
+1. Build the Docker image first:
+   ```bash
+   docker build -t claude-contained .
+   ```
+
+2. Copy the template to your project:
+   ```bash
+   cp -r devcontainer-template/ /path/to/your-project/.devcontainer/
+   ```
+
+3. Open the project in VS Code and select "Reopen in Container"
+
+### Included Extensions
+
+- Red Hat Java (IntelliSense)
+- Debugger for Java
+- Test Runner for Java
+- Maven for Java
+- Spring Boot Extension Pack
+- Lombok Annotations Support
+- GitLens
+
+### Limitations
+
+- **Image must be pre-built**: Run `docker build` before using
+- **Don't run simultaneously**: Avoid running devcontainer while also using standalone `claude-contained` or `claude-docked` (shared `~/.claude` state)
+- **host.local may not work**: VS Code manages networking differently; use explicit port forwarding instead
+
+See `devcontainer-template/README.md` for detailed usage and customization options.
+

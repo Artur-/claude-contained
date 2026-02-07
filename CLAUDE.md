@@ -61,9 +61,27 @@ claude-contained -y -t codex .
 - Only Claude and Codex support `--add-dir` for extra directories; others just get mounts
 - **Script parity**: `claude-contained` and `claude-docked` should always be updated together when adding/changing flags or behavior to maintain feature parity across both container runtimes
 
+### Devcontainer Support
+
+The `devcontainer-template/` directory provides a VS Code devcontainer configuration for Java/Spring development.
+
+**Key design decisions:**
+
+- **Template directory, not in-repo `.devcontainer/`**: Users copy to their own projects; avoids confusion with developing claude-contained itself
+- **`workspaceMount: ""`**: Disables VS Code's default `/workspaces` mount to enable path parity
+- **`overrideCommand: true`**: Bypasses entrypoint.sh since VS Code manages container lifecycle; setup done via `postCreateCommand`
+- **Pre-built image reference**: Simpler than embedding Dockerfile; users build once, reuse everywhere
+
+**Differences from standalone scripts:**
+
+- VS Code manages the container lifecycle, not entrypoint.sh
+- UID/GID handled by VS Code's `remoteUser` feature (may differ from host)
+- Networking managed by VS Code; `host.local` trick may not work
+
 ## Known Caveats
 
 - Port forwarding not available for local MCPs (use `host.local` workaround)
 - Multiple simultaneous sessions share `~/.claude` state; concurrent writes may conflict (Claude Code limitation)
 - `~/.claude.json` is relocated to `~/.claude-contained/.claude.json` (with symlink at original location) to work around Apple Containers' inability to bind-mount individual files. Deleting `~/.claude-contained/` will lose credentials.
 - Running `claude-contained` and regular `claude` simultaneously is not recommended (both access same config via different paths)
+- **Devcontainer limitation**: Don't run VS Code devcontainer and standalone scripts simultaneously on same `~/.claude` directory

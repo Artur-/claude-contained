@@ -1,0 +1,52 @@
+{
+  "name": "Claude Contained (Java/Spring)",
+  "image": "claude-contained:latest",
+
+  // Path parity: disable default mount, use original paths
+  "workspaceMount": "",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
+  "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude-contained,target=${localEnv:HOME}/.claude-contained,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.m2,target=${localEnv:HOME}/.m2,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=${localEnv:HOME}/.gitconfig,type=bind,readonly"
+  ],
+
+  "containerEnv": {
+    "DEVCONTAINER": "true",
+    "HOST_HOME": "${localEnv:HOME}",
+    "JAVA_HOME": "/opt/jbr"
+  },
+
+  "remoteEnv": {
+    "PATH": "/opt/claude:/opt/jbr/bin:${containerEnv:PATH}"
+  },
+
+  "remoteUser": "dev",
+  "overrideCommand": true,
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.java",
+        "vscjava.vscode-java-debug",
+        "vscjava.vscode-java-test",
+        "vscjava.vscode-maven",
+        "vmware.vscode-boot-dev-pack",
+        "gabrielbb.vscode-lombok",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "java.jdt.ls.java.home": "/opt/jbr",
+        "java.configuration.runtimes": [
+          { "name": "JavaSE-21", "path": "/opt/jbr", "default": true }
+        ],
+        "spring-boot.ls.java.home": "/opt/jbr"
+      }
+    }
+  },
+
+  "forwardPorts": [8080, 5005]
+}
