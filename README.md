@@ -181,7 +181,7 @@ Use the claude-contained image as a VS Code devcontainer for Java/Spring/Vaadin 
 
 2. Copy the template to your project:
    ```bash
-   cp -r devcontainer-template/ /path/to/your-project/.devcontainer/
+   cp -r devcontainer/ /path/to/your-project/.devcontainer/
    ```
 
 3. Open the project in VS Code and select "Reopen in Container"
@@ -202,5 +202,5 @@ Use the claude-contained image as a VS Code devcontainer for Java/Spring/Vaadin 
 - **Don't run simultaneously**: Avoid running devcontainer while also using standalone `claude-contained` or `claude-docked` (shared `~/.claude` state)
 - **host.local may not work**: VS Code manages networking differently; use explicit port forwarding instead
 
-See `devcontainer-template/README.md` for detailed usage and customization options.
+See `devcontainer/README.md` for detailed usage and customization options.
 

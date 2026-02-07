@@ -11,13 +11,15 @@
     "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude-contained,target=${localEnv:HOME}/.claude-contained,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.m2,target=${localEnv:HOME}/.m2,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.vaadin,target=${localEnv:HOME}/.vaadin,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.gitconfig,target=${localEnv:HOME}/.gitconfig,type=bind,readonly"
   ],
 
   "containerEnv": {
     "DEVCONTAINER": "true",
-    "HOST_HOME": "${localEnv:HOME}",
-    "JAVA_HOME": "/opt/jbr"
+    "HOME": "${localEnv:HOME}",
+    "JAVA_HOME": "/opt/jbr",
+    "JAVA_TOOL_OPTIONS": ""
   },
 
   "remoteEnv": {
@@ -30,18 +32,17 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "redhat.java",
-        "vscjava.vscode-java-debug",
-        "vscjava.vscode-java-test",
-        "vscjava.vscode-maven",
+        "vscjava.vscode-java-pack",
         "vmware.vscode-boot-dev-pack",
+        "vaadin.vaadin-vscode",
         "gabrielbb.vscode-lombok",
         "eamodio.gitlens"
       ],
       "settings": {
         "java.jdt.ls.java.home": "/opt/jbr",
+        "java.jdt.ls.vmargs": "-XX:+UseG1GC -XX:HotswapAgent=disabled -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx2G -Xms100m -Xlog:disable",
         "java.configuration.runtimes": [
-          { "name": "JavaSE-21", "path": "/opt/jbr", "default": true }
+          { "name": "JavaSE-25", "path": "/opt/jbr", "default": true }
         ],
         "spring-boot.ls.java.home": "/opt/jbr"
       }

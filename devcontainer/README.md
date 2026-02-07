@@ -29,7 +29,7 @@ This template enables VS Code devcontainer workflow with the claude-contained im
 
 1. Copy this template to your project:
    ```bash
-   cp -r /path/to/claude-contained/devcontainer-template /path/to/your-project/.devcontainer
+   cp -r /path/to/claude-contained/devcontainer /path/to/your-project/.devcontainer
    ```
 
 2. Open your project in VS Code
@@ -45,11 +45,9 @@ This template enables VS Code devcontainer workflow with the claude-contained im
 
 ## Included VS Code Extensions
 
-- **Red Hat Java** - Language support for Java
-- **Debugger for Java** - Debug Java applications
-- **Test Runner for Java** - Run and debug tests
-- **Maven for Java** - Maven project support
+- **Extension Pack for Java** - Language support, debugging, testing, Maven
 - **Spring Boot Extension Pack** - Spring Boot tools
+- **Vaadin** - Vaadin development support
 - **Lombok Annotations Support** - Lombok integration
 - **GitLens** - Git supercharged
 
@@ -76,7 +74,7 @@ The template forwards ports 8080 (web app) and 5005 (debug). Modify as needed:
 
 ### Using a Different Java Version
 
-The image includes JetBrains Runtime 21. To use a different JDK, you would need to modify the Dockerfile and rebuild the image.
+The image includes JetBrains Runtime 25. To use a different JDK, you would need to modify the Dockerfile and rebuild the image.
 
 ## Limitations
 

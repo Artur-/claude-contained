@@ -85,8 +85,8 @@ disabledPlugins=Hibernate,Logback,Log4j2,Weld,Deltaspike,WebObjects,WildFlyELRes
 vaadin.liveReloadQuietTime=500
 EOF
 
-# HotSwap always on (JBR 17/21/25)
-ENV JAVA_TOOL_OPTIONS="-XX:+AllowEnhancedClassRedefinition -XX:HotswapAgent=fatjar -Dvaadin.productionMode=false -Dspring.devtools.restart.enabled=false"
+# HotSwap always on (JBR 17/21/25) - requires G1 or Serial GC
+ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:+AllowEnhancedClassRedefinition -XX:HotswapAgent=fatjar -Dvaadin.productionMode=false -Dspring.devtools.restart.enabled=false"
 
 # ---- Eclipse JDT Language Server (jdtls) ------------------------------------
 RUN set -eux; \
