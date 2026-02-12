@@ -20,7 +20,7 @@ COPY Dockerfile custom-packages.tx[t] /tmp/
 RUN set -eux; \
     # Base packages
     BASE_PACKAGES=" \
-      git openssh-client ca-certificates ripgrep \
+      git openssh-client ca-certificates ripgrep jq \
       curl bash xz-utils unzip \
       python3 python3-pip python3-venv \
       iproute2 gosu socat maven \
@@ -86,7 +86,24 @@ vaadin.liveReloadQuietTime=500
 EOF
 
 # HotSwap always on (JBR 17/21/25) - requires G1 or Serial GC
-ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:+AllowEnhancedClassRedefinition -XX:HotswapAgent=fatjar -Dvaadin.productionMode=false -Dspring.devtools.restart.enabled=false"
+# --add-opens flags enable deep reflection for HotswapAgent class redefinition
+ENV JAVA_TOOL_OPTIONS="\
+  -XX:+UseG1GC \
+  -XX:+AllowEnhancedClassRedefinition \
+  -XX:+ClassUnloading \
+  -XX:HotswapAgent=fatjar \
+  --add-opens=java.base/java.lang=ALL-UNNAMED \
+  --add-opens=java.base/java.lang.reflect=ALL-UNNAMED \
+  --add-opens=java.base/java.io=ALL-UNNAMED \
+  --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
+  --add-opens=java.base/sun.security.action=ALL-UNNAMED \
+  --add-opens=java.base/jdk.internal.loader=ALL-UNNAMED \
+  --add-opens=java.desktop/java.beans=ALL-UNNAMED \
+  --add-opens=java.desktop/com.sun.beans=ALL-UNNAMED \
+  --add-opens=java.desktop/com.sun.beans.introspect=ALL-UNNAMED \
+  --add-opens=java.desktop/com.sun.beans.util=ALL-UNNAMED \
+  -Dvaadin.productionMode=false \
+  -Dspring.devtools.restart.enabled=false"
 
 # ---- Eclipse JDT Language Server (jdtls) ------------------------------------
 RUN set -eux; \
