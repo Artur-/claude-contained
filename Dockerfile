@@ -182,7 +182,7 @@ RUN npx playwright install chromium
 # This wrapper redirects to our installed Playwright Chromium.
 RUN mkdir -p /opt/google/chrome && cat <<'EOF' > /opt/google/chrome/chrome
 #!/bin/bash
-exec /ms-playwright/chromium-*/chrome-linux/chrome "$@"
+exec /ms-playwright/chromium-*/chrome-linux/chrome --no-sandbox "$@"
 EOF
 RUN chmod +x /opt/google/chrome/chrome
 
