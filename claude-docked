@@ -351,6 +351,21 @@ container_argv=(
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
 
+# Pass VAADIN_PRO_KEY: from env var or ~/.vaadin/proKey file (extract .proKey from JSON)
+VAADIN_KEY_VALUE="${VAADIN_PRO_KEY:-}"
+if [[ -z "$VAADIN_KEY_VALUE" && -f "${HOST_HOME}/.vaadin/proKey" ]]; then
+  if ! command -v jq &>/dev/null; then
+    echo "Error: jq is required to parse ~/.vaadin/proKey" >&2
+    echo "Install with: brew install jq" >&2
+    echo "Or set VAADIN_PRO_KEY environment variable directly" >&2
+    exit 1
+  fi
+  VAADIN_KEY_VALUE="$(jq -r '.proKey // empty' "${HOST_HOME}/.vaadin/proKey" 2>/dev/null || true)"
+fi
+if [[ -n "$VAADIN_KEY_VALUE" ]]; then
+  container_argv+=( -e "VAADIN_PRO_KEY=${VAADIN_KEY_VALUE}" )
+fi
+
 # Mount worktree's main repository if needed
 if [[ -n "$worktree_main_repo" ]]; then
   container_argv+=( --mount "type=bind,src=${worktree_main_repo},dst=${worktree_main_repo}" )
