@@ -179,7 +179,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 # ---- Playwright browser (build-time install for reliability) ----------------
 # Install Chromium to a fixed location instead of user cache for container use
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npx playwright install chromium
+RUN npx playwright install --with-deps chromium chromium-headless-shell
 
 # ---- Chrome wrapper for Playwright MCP compatibility ------------------------
 # When projects use @playwright/mcp without --browser flag, it looks for Chrome.
