@@ -27,7 +27,7 @@ RUN set -eux; \
       libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
       libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \
       libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 \
-      libxfixes3 libxkbcommon0 libxrandr2 xvfb zip unzip bubblewrap"; \
+      libxfixes3 libxkbcommon0 libxrandr2 libxtst6 xvfb zip unzip bubblewrap"; \
     \
     # Extract custom packages (non-comment, non-empty lines)
     CUSTOM_PACKAGES=""; \
@@ -179,7 +179,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 # ---- Playwright browser (build-time install for reliability) ----------------
 # Install Chromium to a fixed location instead of user cache for container use
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npx playwright install --with-deps chromium chromium-headless-shell
+RUN npx playwright@latest install --with-deps chromium chromium-headless-shell
 
 # ---- Chrome wrapper for Playwright MCP compatibility ------------------------
 # When projects use @playwright/mcp without --browser flag, it looks for Chrome.
