@@ -56,7 +56,7 @@ claude-contained -N .
 - **HOME parity**: Container HOME matches host HOME for consistent behavior
 - **UID/GID matching**: Container user matches host user IDs for proper file permissions
 - **State sharing**: Tool configs (`~/.claude`, `~/.codex`, `~/.copilot`, `~/.gemini`, `~/.vibe`), Maven cache (`~/.m2`), Vaadin state (`~/.vaadin`), and Cargo cache (`~/.cargo`) bind-mounted from host
-- **Shared skills**: `--share-skills=DIR` is opt-in and has no default. It requires a full path and mounts `DIR` as each tool's skills directory. Codex gets a nested mount for host `~/.codex/skills/.system` so built-ins remain visible while new installs write to `DIR`.
+- **Shared skills**: `--share-skills=DIR` is opt-in, repeatable, and expands `~/`. The first source is mounted directly as each tool's skills directory, so new skills write there. Later sources' non-hidden, nonempty top-level skill directories are nested bind mounts; edits stay in their original source. Duplicate names fail unless the first source has an empty directory usable as a mountpoint. Empty host mountpoint directories are untracked by Git; never mount over nonempty directories, files, or symlinks. The startup summary shows all sources and targets, marking the first source as the destination for new skills. Codex gets a nested mount for host `~/.codex/skills/.system` to preserve built-ins. Keep both launchers in sync; regression coverage is in `tests/shared-skills.test.sh`.
 - **SSH agent forwarding**: Disabled by default for security; enable with `-S/--ssh` flag (required for `git push` to SSH remotes)
 - Host services accessible via `host.local` hostname (resolved from container gateway IP)
 

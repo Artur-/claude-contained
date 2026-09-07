@@ -20,7 +20,7 @@ Options:
   -W, --lock-worktrees  Auto-lock hidden linked worktrees (skip prompt)
   -y, --yolo         Skip all permission prompts (tool-specific flag)
   -N, --contained-node-modules  Use container-specific node_modules (skip prompt)
-  --share-skills=DIR  Mount shared skill folders from DIR (opt-in)
+  --share-skills=DIR  Share skill folders from DIR (repeatable; accepts ~/)
   --readonly-extras  Mount all extra dirs read-only (suffix overrides per-path)
   -a, --attach [NAME]  Attach to running container (runs tool, or bash with -s)
   -h, --help         Show this help message
@@ -33,8 +33,9 @@ Behavior:
     The working directory cannot be read-only.
   - Tool configs (~/.claude, ~/.codex, ~/.copilot, ~/.gemini, ~/.vibe), Maven cache (~/.m2), Vaadin state (~/.vaadin), and Cargo cache (~/.cargo) are bind-mounted.
   - --share-skills=DIR mounts DIR as each tool's skills directory.
-    For Codex, ~/.codex/skills/.system is mounted back over DIR/.system
-    so built-in skills remain visible while new installs write to DIR.
+    Repeat to combine top-level skill directories; duplicate names are errors.
+    Edits write to the source; new skills go to the first shared directory.
+    Codex built-in skills remain available through ~/.codex/skills/.system.
   - SSH agent forwarding is disabled by default; use --ssh to enable (for git push).
   - Git worktrees are detected; main repository's .git directory is mounted for full git access.
   - Linked worktrees hidden from the container can be auto-locked while the container runs.
@@ -56,7 +57,7 @@ Examples:
   claude-docked --rebuild=full      # Full fresh rebuild, then exit
   claude-docked -p 8080:8080 .       # Expose port 8080
   claude-docked -H 3845 .            # Forward host:3845 to container localhost:3845
-  claude-docked --share-skills=/Users/me/Projects/skills .
+  claude-docked --share-skills=~/Projects/skills --share-skills=~/Projects/skills-public .
   claude-docked -a                   # List and attach to running container
   claude-docked -a myproject         # Attach or create named container
 
@@ -134,7 +135,7 @@ container_arch() {
 dir_is_empty() {
   local entry
   for entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
-    [[ -e "$entry" ]] && return 1
+    [[ -e "$entry" || -L "$entry" ]] && return 1
   done
   return 0
 }
@@ -220,6 +221,7 @@ rebuild_mode="none"
 tool="claude"
 ro_default=0
 share_skills_dir=""
+share_skills_dirs=()
 port_maps=()
 host_forwards=()
 while [[ "${1:-}" == -* ]]; do
@@ -242,6 +244,7 @@ while [[ "${1:-}" == -* ]]; do
         echo "error: --share-skills requires a non-empty directory" >&2
         exit 2
       fi
+      share_skills_dirs+=("$share_skills_dir")
       shift
       ;;
     --rebuild)
@@ -315,13 +318,18 @@ while [[ "${1:-}" == -* ]]; do
   esac
 done
 
-if [[ -n "$share_skills_dir" ]]; then
+for i in "${!share_skills_dirs[@]}"; do
+  share_skills_dir="${share_skills_dirs[$i]}"
+  case "$share_skills_dir" in
+    '~') share_skills_dir="$HOME" ;;
+    '~/'*) share_skills_dir="$HOME/${share_skills_dir:2}" ;;
+  esac
   if [[ ! -d "$share_skills_dir" ]]; then
     echo "error: --share-skills directory does not exist: $share_skills_dir" >&2
     exit 2
   fi
-  share_skills_dir="$(resolve_path "$share_skills_dir")"
-fi
+  share_skills_dirs[$i]="$(resolve_path "$share_skills_dir")"
+done
 
 # Ensure Docker is running (skipped when sourced for tests)
 if [[ -z "${CLAUDE_CONTAINED_LIB_ONLY:-}" ]] && ! docker info &>/dev/null; then
@@ -814,6 +822,87 @@ check_for_updates() {
   ) 2>/dev/null || true
 }
 
+# Use the first source as the writable root, then mount additional skills below
+# it. Empty directories in the first source are safe mountpoints (including
+# those created by previous launches); never hide files, links, or nonempty dirs.
+prepare_shared_skills() {
+  share_skills_dir=""
+  shared_skill_names=()
+  shared_skill_paths=()
+  shared_skills_targets=()
+  [[ ${#share_skills_dirs[@]} -gt 0 ]] || return 0
+  share_skills_dir="${share_skills_dirs[0]}"
+
+  local src entry name previous dst
+  for src in "${share_skills_dirs[@]:1}"; do
+    for entry in "$src"/*; do
+      [[ -d "$entry" ]] || continue
+      # Ignore empty mountpoints left when this source was previously first.
+      dir_is_empty "$entry" && continue
+      name="${entry##*/}"
+      dst="$share_skills_dir/$name"
+      if [[ -L "$dst" ]] || { [[ -e "$dst" ]] && { [[ ! -d "$dst" ]] || ! dir_is_empty "$dst"; }; }; then
+        echo "error: duplicate shared skill '$name': $dst and $entry" >&2
+        return 2
+      fi
+      for previous in "${shared_skill_names[@]+"${shared_skill_names[@]}"}"; do
+        if [[ "$name" == "$previous" ]]; then
+          echo "error: duplicate shared skill directory '$name' in --share-skills sources" >&2
+          return 2
+        fi
+      done
+      shared_skill_names+=("$name")
+      shared_skill_paths+=("$(resolve_path "$entry")")
+    done
+  done
+}
+
+add_shared_skills_mount() {
+  local dst="$1"
+  local dst_parent="$2"
+  local index name
+
+  [[ -n "$dst_parent" ]] && mkdir -p "$dst_parent"
+  container_argv+=( --mount "type=bind,src=${share_skills_dir},dst=${dst}" )
+  for index in "${!shared_skill_names[@]}"; do
+    name="${shared_skill_names[$index]}"
+    # Bind mounts need an empty destination; these contain no copied skill data
+    # and Git does not track them. New top-level skills write to the root mount.
+    mkdir -p "$share_skills_dir/$name"
+    container_argv+=( --mount "type=bind,src=${shared_skill_paths[$index]},dst=${dst}/${name}" )
+  done
+  shared_skills_targets+=("$dst")
+}
+
+shared_skills_display_path() {
+  case "$1" in
+    "$HOME") printf '~' ;;
+    "$HOME/"*) printf '~/%s' "${1#"$HOME/"}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+show_shared_skills_summary() {
+  local path separator=""
+  {
+    printf 'Skills: ['
+    for path in "${share_skills_dirs[@]}"; do
+      printf '%s' "$separator"
+      shared_skills_display_path "$path"
+      [[ -n "$separator" ]] || printf ' (new skills here)'
+      separator=", "
+    done
+    printf '] -> ['
+    separator=""
+    for path in "${shared_skills_targets[@]}"; do
+      printf '%s' "$separator"
+      shared_skills_display_path "$path"
+      separator=", "
+    done
+    printf ']\n'
+  } >&2
+}
+
 # Test hook: when sourced with CLAUDE_CONTAINED_LIB_ONLY=1, stop here so the
 # helper functions above can be unit-tested without launching a container.
 if [[ -n "${CLAUDE_CONTAINED_LIB_ONLY:-}" ]]; then
@@ -916,14 +1005,7 @@ container_argv=(
   --mount "type=bind,src=${main_host},dst=${main_host}"
 )
 
-add_shared_skills_mount() {
-  local dst="$1"
-  local dst_parent="$2"
-
-  [[ -n "$dst_parent" ]] && mkdir -p "$dst_parent"
-  container_argv+=( --mount "type=bind,src=${share_skills_dir},dst=${dst}" )
-  echo "Sharing skills: ${share_skills_dir} -> ${dst}" >&2
-}
+prepare_shared_skills
 
 if [[ -n "$share_skills_dir" ]]; then
   add_shared_skills_mount "${HOST_CLAUDE_DIR}/skills" "${HOST_CLAUDE_DIR}"
@@ -932,10 +1014,10 @@ if [[ -n "$share_skills_dir" ]]; then
   add_shared_skills_mount "${HOST_COPILOT_DIR}/skills" "${HOST_COPILOT_DIR}"
   add_shared_skills_mount "${HOST_GEMINI_DIR}/skills" "${HOST_GEMINI_DIR}"
   add_shared_skills_mount "${HOST_VIBE_DIR}/skills" "${HOST_VIBE_DIR}"
+  show_shared_skills_summary
 
   if [[ -d "${HOST_CODEX_DIR}/skills/.system" ]]; then
     container_argv+=( --mount "type=bind,src=${HOST_CODEX_DIR}/skills/.system,dst=${HOST_CODEX_DIR}/skills/.system" )
-    echo "Sharing Codex system skills: ${HOST_CODEX_DIR}/skills/.system -> ${HOST_CODEX_DIR}/skills/.system" >&2
   fi
 fi
 
