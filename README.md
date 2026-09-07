@@ -69,7 +69,7 @@ claude-contained [options] [main_dir] [extra_dir ...] [-- <tool args...>]
 | `-w`, `--worktree` | Auto-include git worktree's main repository (skip prompt) |
 | `-y`, `--yolo` | Skip all permission prompts (tool-specific flag) |
 | `-N`, `--contained-node-modules` | Use container-specific node_modules (skip prompt) |
-| `--share-skills=DIR` | Mount shared skill folders from `DIR` (opt-in, no default; use a full path) |
+| `--share-skills=DIR` | Share skill folders from `DIR` (repeatable, opt-in; accepts `~/`) |
 | `-a`, `--attach [NAME]` | Attach to running container (runs tool, or bash with `-s`) |
 | `-h`, `--help` | Show help message |
 
@@ -90,13 +90,39 @@ All config directories are bind-mounted regardless of which tool you run.
 - Additional directories are mounted and auto-added via `--add-dir` (Claude and Codex only)
 - Append `:ro` to an extra dir to mount it read-only (or `:rw` to force read-write); use `--readonly-extras` to default all extras to read-only
 - Tool configs and Maven cache (`~/.m2`) are bind-mounted for persistence
-- `--share-skills=DIR` mounts `DIR` as each tool's skills directory: `~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.<tool>/skills` for Copilot, Gemini, and Vibe. For Codex, the host's `~/.codex/skills/.system` is mounted back over `DIR/.system` so built-in skills remain visible while new installs write to `DIR`. Use a full path; `~` is not expanded by the launcher.
+- Repeat `--share-skills=DIR` to combine [shared skills](#shared-skills); the first source receives new skills.
 - SSH agent forwarding is disabled by default; use `-S`/`--ssh` to enable
 - The GitHub CLI is included, with the [`gh-stack`](https://github.com/github/gh-stack) extension preinstalled (`gh stack ...`). Extensions are baked into the image under `/opt/gh` and linked into `~/.local/share/gh/extensions` at startup; add more with the `GH_EXTENSIONS` build arg (space-separated, e.g. `container build --build-arg GH_EXTENSIONS="github/gh-stack owner/gh-foo" -t claude-contained .`)
 - The Rust toolchain ships with `clippy`, `rustfmt`, `just`, the `cargo nextest` test runner, plus the lint/format helpers `typos`, `taplo`, and `cargo dylint` (with `dylint-link`). Versions can be pinned with the `TYPOS_VERSION`, `TAPLO_VERSION`, `NEXTEST_VERSION`, and `DYLINT_VERSION` build args.
 - Rust state is persisted in container-specific directories — `~/.claude-contained/cargo-linux-<arch>` is mounted as `~/.cargo` and `~/.claude-contained/rustup-linux-<arch>` as `~/.rustup` — so crates, extra toolchains (`rust-toolchain.toml` pins, dylint's nightly) and dylint drivers survive across runs. Your host `~/.cargo`/`~/.rustup` are left alone: they hold macOS binaries that cannot run in the Linux container, and rustup rewrites the proxies in `~/.cargo/bin` whenever it installs a toolchain. The image's stable toolchain is symlinked into the mount rather than copied, so only newly installed toolchains use space there.
 - Git worktrees are detected; main repository is included for full git access
 - If a mounted main repository has linked worktrees outside the mounted directories, the launcher offers to auto-lock those worktrees while the container runs (otherwise an in-container `git worktree prune`/`git gc` could remove them). Auto-lock reasons use `cc-autolocked-by:` and are removed when the last owning container exits. The locking is self-healing — a lock left behind by a launcher that was killed is reclaimed automatically by the next run — and fail-safe, applying the locks even if the internal mutex is unavailable so the container never runs with worktrees unprotected.
+
+### Shared Skills
+
+`claude-contained` and `claude-docked` support the same repeatable `--share-skills=DIR` option. Put the directory that should receive **new skills first**:
+
+```bash
+claude-contained --share-skills=~/Projects/skills --share-skills=~/Projects/skills-public .
+claude-docked --share-skills=~/Projects/skills --share-skills=~/Projects/skills-public .
+```
+
+Both commands combine the sources at `~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`, `~/.copilot/skills`, `~/.gemini/skills`, and `~/.vibe/skills` inside the container. Sharing is opt-in, with no default source. Paths may be absolute, relative, or start with `~/`.
+
+- **New skills:** Creating a skill under any shared target writes it directly into the first source (`~/Projects/skills` above).
+- **Existing skills:** Edits write back to the source that contains the skill. For example, editing a skill from `skills-public` updates that repository.
+- **Combined contents:** The first source is mounted as the shared root. Non-hidden, nonempty top-level directories from later sources are mounted beneath it. Hidden entries, empty directories, and root files from later sources are excluded.
+- **Conflicts:** Duplicate names cause an error, except that an empty directory in the first source can serve as a mountpoint. Files, symlinks, and nonempty directories in the first source are never hidden by a later source.
+- **Host folders:** Empty mountpoint directories may appear in the first source on the host. Git does not track them, and no skill data is copied there.
+- **Codex built-ins:** The host's `~/.codex/skills/.system` remains mounted at the Codex target.
+
+Startup lists the sources and container targets in one line, marking where new skills go:
+
+```text
+Skills: [~/Projects/skills (new skills here), ~/Projects/skills-public] -> [~/.claude/skills, ~/.codex/skills, ~/.agents/skills, ~/.copilot/skills, ~/.gemini/skills, ~/.vibe/skills]
+```
+
+Start a new container after changing the source list or adding or moving skill directories in later sources. No image rebuild is needed for this launcher feature.
 
 ### Examples
 
@@ -116,7 +142,7 @@ claude-contained -y -t codex .                      # Codex with --yolo
 claude-contained --rebuild .                        # Refresh AI tools first
 claude-contained --rebuild=full .                   # Full fresh rebuild first
 claude-contained -s                                 # Debug shell
-claude-contained --share-skills=/Users/me/Projects/skills . # Share skills into tool skill dirs
+claude-contained --share-skills=~/Projects/skills . # Share skills into tool skill dirs
 
 # Port forwarding
 claude-contained -p 8080:8080 .                     # Expose port 8080
